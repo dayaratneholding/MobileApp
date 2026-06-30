@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { LoginScreen } from './src/features/auth/LoginScreen';
 import { HomeScreen } from './src/features/home/HomeScreen';
+import { Dashboard } from './src/features/Dashboard/Dashboard';
 import { colors } from './src/styles/theme';
 
 type AppPhase = 'home-preview' | 'login' | 'authenticated';
@@ -34,10 +35,12 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      {phase === 'home-preview' || phase === 'authenticated' ? (
+      {phase === 'authenticated' ? (
+        <Dashboard userEmail={userEmail ?? undefined} onLogout={handleLogout} />
+      ) : phase === 'home-preview' ? (
         <HomeScreen
           userEmail={userEmail ?? undefined}
-          isPreview={phase === 'home-preview'}
+          isPreview
           onLogout={handleLogout}
         />
       ) : (
