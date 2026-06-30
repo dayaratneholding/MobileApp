@@ -20,7 +20,6 @@ export function Dashboard() {
           end={{ x: 1, y: 1 }}
           style={styles.header}
         >
-          {/* Your header content */}
         </LinearGradient>
       </ScrollView>
     </View>
