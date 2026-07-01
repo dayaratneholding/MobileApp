@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,11 +10,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
+import { LeaveEntryForm } from './LeaveEntryForm';
+import { ViewLeaveScreen } from './ViewLeaveScreen';
 
 type Props = {
   session: AuthSession;
   onBack: () => void;
 };
+
+type Screen = 'home' | 'add-leave' | 'view-leave';
 
 type LeaveWidget = {
   key: string;
@@ -61,8 +65,28 @@ const leaveBalances = [
 ];
 
 export function LeaveHomeScreen({ session, onBack }: Props) {
+  const [screen, setScreen] = useState<Screen>('home');
   const name = session.userName || session.userID;
   const totalRemaining = leaveBalances.reduce((sum, b) => sum + b.remaining, 0);
+
+  if (screen === 'add-leave') {
+    return (
+      <LeaveEntryForm
+        session={session}
+        onBack={() => setScreen('home')}
+        onSuccess={() => setScreen('home')}
+      />
+    );
+  }
+
+  if (screen === 'view-leave') {
+    return (
+      <ViewLeaveScreen
+        session={session}
+        onBack={() => setScreen('home')}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -107,6 +131,13 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
               <Pressable
                 key={widget.key}
                 style={[styles.widgetCard, widget.fullWidth && styles.widgetFull]}
+                onPress={
+                  widget.key === 'add-leave'
+                    ? () => setScreen('add-leave')
+                    : widget.key === 'view-leave'
+                      ? () => setScreen('view-leave')
+                      : undefined
+                }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: widget.tint }]}>
                   <Text style={styles.widgetEmoji}>{widget.emoji}</Text>
