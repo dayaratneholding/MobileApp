@@ -10,9 +10,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import type { AuthSession } from '../../types/api';
 
 type Props = {
-  userEmail?: string;
+  session: AuthSession;
   onLogout: () => void;
 };
 
@@ -65,8 +66,8 @@ const widgets: Widget[] = [
   },
 ];
 
-export function Dashboard({ userEmail, onLogout }: Props) {
-  const name = userEmail ? userEmail.split('@')[0] : 'Employee';
+export function Dashboard({ session, onLogout }: Props) {
+  const name = session.userName || session.userID;
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     day: 'numeric',
@@ -93,7 +94,7 @@ export function Dashboard({ userEmail, onLogout }: Props) {
                   resizeMode="contain"
                 />
               </View>
-              <Text style={styles.brandName}>PSK</Text>
+              <Text style={styles.brandName}>{session.companyCode}</Text>
             </View>
             <Pressable style={styles.logoutBtn} onPress={onLogout} hitSlop={8}>
               <Text style={styles.logoutText}>Logout</Text>
@@ -104,6 +105,7 @@ export function Dashboard({ userEmail, onLogout }: Props) {
             <Text style={styles.greeting}>Welcome back,</Text>
             <Text style={styles.name}>{name} 👋</Text>
             <Text style={styles.date}>{today}</Text>
+            <Text style={styles.company}>{session.companyName}</Text>
           </View>
         </LinearGradient>
 
@@ -246,6 +248,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: 'rgba(255,255,255,0.8)',
     marginTop: spacing.xs,
+  },
+  company: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: spacing.xs,
+    fontWeight: '600',
   },
   body: {
     padding: spacing.xl,
