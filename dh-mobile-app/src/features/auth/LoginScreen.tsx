@@ -180,8 +180,9 @@ export function LoginScreen({ onLogin }: Props) {
                   isPassword
                   value={password}
                   onChangeText={setPassword}
-                  error={error || undefined}
                 />
+
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                 <Pressable style={styles.forgot} hitSlop={8}>
                   <Text style={styles.forgotText}>Forgot password?</Text>
@@ -301,7 +302,8 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.danger,
     marginTop: spacing.md,
-    textAlign: 'center',
+    textAlign: 'left',
+    lineHeight: 20,
   },
   footerText: {
     ...typography.body,
