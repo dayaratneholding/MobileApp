@@ -18,7 +18,7 @@ type Props = {
   onBack: () => void;
 };
 
-type Screen = 'home' | 'add-leave' | 'view-leave';
+type Screen = 'home' | 'add-leave' | 'view-leave' | 'edit-leave';
 
 type LeaveWidget = {
   key: string;
@@ -66,6 +66,8 @@ const leaveBalances = [
 
 export function LeaveHomeScreen({ session, onBack }: Props) {
   const [screen, setScreen] = useState<Screen>('home');
+  const [editLeaveId, setEditLeaveId] = useState<number | null>(null);
+  const [viewLeaveRefreshKey, setViewLeaveRefreshKey] = useState(0);
   const name = session.userName || session.userID;
   const totalRemaining = leaveBalances.reduce((sum, b) => sum + b.remaining, 0);
 
@@ -82,8 +84,28 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
   if (screen === 'view-leave') {
     return (
       <ViewLeaveScreen
+        key={viewLeaveRefreshKey}
         session={session}
+        refreshKey={viewLeaveRefreshKey}
         onBack={() => setScreen('home')}
+        onEditLeave={(leaveId) => {
+          setEditLeaveId(leaveId);
+          setScreen('edit-leave');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'edit-leave' && editLeaveId != null) {
+    return (
+      <LeaveEntryForm
+        session={session}
+        editLeaveId={editLeaveId}
+        onBack={() => setScreen('view-leave')}
+        onSuccess={() => {
+          setViewLeaveRefreshKey((key) => key + 1);
+          setScreen('view-leave');
+        }}
       />
     );
   }

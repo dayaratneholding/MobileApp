@@ -100,6 +100,67 @@ export async function postHcmJson<TResponse, TBody>(
   return result;
 }
 
+export async function putHcmJson<TResponse, TBody>(
+  path: string,
+  body: TBody,
+): Promise<TResponse> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const url = `${HCM_API_URL}${path}`;
+  const requestBody = JSON.stringify(body);
+
+  logHcm(path, {
+    url,
+    hasToken: Boolean(token),
+    request: body,
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: requestBody,
+    });
+  } catch (err) {
+    logHcm(path, { networkError: String(err) });
+    throw new ApiError(
+      `Cannot reach HCM server (${HCM_API_URL}). Check that the server is online and reachable from your network.`,
+    );
+  }
+
+  const { parsed: result, raw } = await parseJson<TResponse>(response, path);
+
+  logHcm(path, {
+    status: response.status,
+    ok: response.ok,
+    response: result,
+    raw: raw.slice(0, 500),
+  });
+
+  if (!response.ok) {
+    const apiResult = result as ApiResult<unknown>;
+    const fallback =
+      response.status === 401
+        ? 'Session expired or not authorized. Please log in again.'
+        : `HCM request failed (${response.status}).`;
+    throw new ApiError(
+      apiResult.messages?.[0] ?? fallback,
+      apiResult.messages ?? undefined,
+    );
+  }
+
+  return result;
+}
+
 function buildQueryString(
   params: Record<string, string | number | boolean | undefined | null>,
 ): string {

@@ -19,7 +19,9 @@ import type { MobileLeaveEntry } from '../../types/leave';
 
 type Props = {
   session: AuthSession;
+  refreshKey?: number;
   onBack: () => void;
+  onEditLeave: (leaveId: number) => void;
 };
 
 const PAGE_SIZE = 10;
@@ -47,7 +49,15 @@ function sortByDateFromDesc(items: MobileLeaveEntry[]): MobileLeaveEntry[] {
   });
 }
 
-function LeaveRecordCard({ item }: { item: MobileLeaveEntry }) {
+function LeaveRecordCard({
+  item,
+  showEdit,
+  onEdit,
+}: {
+  item: MobileLeaveEntry;
+  showEdit: boolean;
+  onEdit: (leaveId: number) => void;
+}) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -102,11 +112,25 @@ function LeaveRecordCard({ item }: { item: MobileLeaveEntry }) {
         <Text style={styles.detailLabel}>Applied</Text>
         <Text style={styles.detailValue}>{formatDate(item.createdDate)}</Text>
       </View>
+
+      {showEdit ? (
+        <Pressable
+          style={styles.editBtn}
+          onPress={() => onEdit(item.id)}
+        >
+          <Text style={styles.editBtnText}>Edit Leave</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
-export function ViewLeaveScreen({ session, onBack }: Props) {
+export function ViewLeaveScreen({
+  session,
+  refreshKey = 0,
+  onBack,
+  onEditLeave,
+}: Props) {
   const [items, setItems] = useState<MobileLeaveEntry[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -171,7 +195,7 @@ export function ViewLeaveScreen({ session, onBack }: Props) {
 
   useEffect(() => {
     loadInitial();
-  }, [loadInitial]);
+  }, [loadInitial, refreshKey]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -268,7 +292,13 @@ export function ViewLeaveScreen({ session, onBack }: Props) {
         <FlatList
           data={visibleItems}
           keyExtractor={(item) => String(item.id ?? item.empLeaveSerialID)}
-          renderItem={({ item }) => <LeaveRecordCard item={item} />}
+          renderItem={({ item }) => (
+            <LeaveRecordCard
+              item={item}
+              showEdit={!activeOnly}
+              onEdit={onEditLeave}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -447,5 +477,16 @@ const styles = StyleSheet.create({
   },
   footerLoader: {
     marginVertical: spacing.lg,
+  },
+  editBtn: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  editBtnText: {
+    ...typography.label,
+    color: colors.textOnPrimary,
   },
 });

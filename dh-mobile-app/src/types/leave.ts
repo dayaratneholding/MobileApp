@@ -52,6 +52,48 @@ export type CreateEmployeeLeaveCommand = {
   cancelLeave?: boolean | null;
 };
 
+export type GetLeaveEntryDto = {
+  empLeaveSerialID: number;
+  eeSerialID: number;
+  comSerialID: number;
+  entryDate: string;
+  leaveType: LeaveType;
+  leaveCount: number;
+  dateFrom: string;
+  dateTo: string;
+  reason: ReasonType;
+  leaveApprovedBy: number;
+  cancelNotes?: string | null;
+  halfDayId?: HalfDay;
+  leaveStatus?: LeaveStatus;
+  active?: boolean;
+  cancelLeave?: boolean | null;
+};
+
+export type UpdateEmployeeLeaveEntryCommand = {
+  empLeaveSerialID: number;
+  eeSerialID: number;
+  comSerialID: number;
+  entryDate: string;
+  leaveType: LeaveType;
+  leaveCount: number;
+  dateFrom: string;
+  dateTo: string;
+  reason: ReasonType;
+  leaveApprovedBy: number;
+  cancelNotes?: string | null;
+  active?: boolean | null;
+  halfDayId?: HalfDay;
+  leaveStatus?: LeaveStatus;
+  cancelLeave?: boolean | null;
+};
+
+export type GetLeaveEntryResult = {
+  succeeded: boolean;
+  messages?: string[] | null;
+  data?: GetLeaveEntryDto | null;
+};
+
 export type Int32Result = {
   succeeded: boolean;
   messages?: string[] | null;

@@ -15,6 +15,8 @@ import { StatusBar } from 'expo-status-bar';
 import {
   createLeaveEntitlement,
   getCalendarLeaveCount,
+  getLeaveEntitlementById,
+  updateLeaveEntitlement,
 } from '../../api/endpoints/leave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
@@ -31,9 +33,11 @@ import {
   REASON_OPTIONS,
   ReasonType,
 } from '../../types/leave';
+import type { GetLeaveEntryDto } from '../../types/leave';
 
 type Props = {
   session: AuthSession;
+  editLeaveId?: number;
   onBack: () => void;
   onSuccess?: () => void;
 };
@@ -51,7 +55,19 @@ function toIsoDateTime(dateValue: string): string {
   return date.toISOString();
 }
 
-export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
+function toDateInputValue(value?: string | null): string {
+  if (!value) return todayString();
+  return value.slice(0, 10);
+}
+
+export function LeaveEntryForm({
+  session,
+  editLeaveId,
+  onBack,
+  onSuccess,
+}: Props) {
+  const isEditMode = editLeaveId != null;
+
   const [leaveType, setLeaveType] = useState<LeaveType>(LeaveType.Annual);
   const [reason, setReason] = useState<ReasonType>(ReasonType.AnnualLeave);
   const [halfDayId, setHalfDayId] = useState<HalfDay>(HalfDay.None);
@@ -62,11 +78,61 @@ export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
   const [countLoading, setCountLoading] = useState(false);
   const [countError, setCountError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingEntry, setLoadingEntry] = useState(isEditMode);
   const [error, setError] = useState('');
+  const [existingEntry, setExistingEntry] = useState<GetLeaveEntryDto | null>(
+    null,
+  );
 
   const isHalfDay = halfDayId !== HalfDay.None;
 
   useEffect(() => {
+    if (!isEditMode || editLeaveId == null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadLeaveEntry = async () => {
+      setLoadingEntry(true);
+      setError('');
+
+      try {
+        const entry = await getLeaveEntitlementById(editLeaveId);
+
+        if (cancelled) return;
+
+        setExistingEntry(entry);
+        setLeaveType(entry.leaveType);
+        setReason(entry.reason);
+        setHalfDayId(entry.halfDayId ?? HalfDay.None);
+        setDateFrom(toDateInputValue(entry.dateFrom));
+        setDateTo(toDateInputValue(entry.dateTo));
+        setCancelNotes(entry.cancelNotes ?? '');
+        setLeaveCount(entry.leaveCount);
+      } catch (err) {
+        if (!cancelled) {
+          setError(getApiErrorMessage(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingEntry(false);
+        }
+      }
+    };
+
+    loadLeaveEntry();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editLeaveId, isEditMode]);
+
+  useEffect(() => {
+    if (loadingEntry) {
+      return;
+    }
+
     if (!session.eESerialID || !dateFrom || !dateTo) {
       setLeaveCount(null);
       return;
@@ -122,7 +188,7 @@ export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [dateFrom, dateTo, isHalfDay, session.eESerialID]);
+  }, [dateFrom, dateTo, isHalfDay, loadingEntry, session.eESerialID]);
 
   const handleSubmit = async () => {
     if (!session.eESerialID) {
@@ -149,29 +215,48 @@ export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
     setLoading(true);
 
     try {
-      const payload = {
-        eeSerialID: session.eESerialID,
-        comSerialID: session.comSerialID,
-        entryDate: new Date().toISOString(),
-        leaveType,
-        leaveCount,
-        dateFrom: toIsoDateTime(dateFrom),
-        dateTo: toIsoDateTime(dateTo),
-        reason,
-        leaveApprovedBy: 0,
-        cancelNotes: cancelNotes.trim() || null,
-        halfDayId,
-        leaveStatus: LeaveStatus.Pending,
-        cancelLeave: false,
-      };
+      if (isEditMode && existingEntry) {
+        const updatePayload = {
+          empLeaveSerialID: existingEntry.empLeaveSerialID,
+          eeSerialID: existingEntry.eeSerialID,
+          comSerialID: existingEntry.comSerialID,
+          entryDate: existingEntry.entryDate,
+          leaveType,
+          leaveCount,
+          dateFrom: toIsoDateTime(dateFrom),
+          dateTo: toIsoDateTime(dateTo),
+          reason,
+          leaveApprovedBy: existingEntry.leaveApprovedBy,
+          cancelNotes: cancelNotes.trim() || null,
+          active: existingEntry.active ?? false,
+          halfDayId,
+          leaveStatus: existingEntry.leaveStatus ?? LeaveStatus.Pending,
+          cancelLeave: existingEntry.cancelLeave ?? false,
+        };
 
-      if (__DEV__) {
-        console.log('[Leave] Create payload:', payload);
+        await updateLeaveEntitlement(updatePayload);
+        Alert.alert('Success', 'Leave updated successfully.');
+      } else {
+        const createPayload = {
+          eeSerialID: session.eESerialID,
+          comSerialID: session.comSerialID,
+          entryDate: new Date().toISOString(),
+          leaveType,
+          leaveCount,
+          dateFrom: toIsoDateTime(dateFrom),
+          dateTo: toIsoDateTime(dateTo),
+          reason,
+          leaveApprovedBy: 0,
+          cancelNotes: cancelNotes.trim() || null,
+          halfDayId,
+          leaveStatus: LeaveStatus.Pending,
+          cancelLeave: false,
+        };
+
+        await createLeaveEntitlement(createPayload);
+        Alert.alert('Success', 'Leave request submitted successfully.');
       }
 
-      await createLeaveEntitlement(payload);
-
-      Alert.alert('Success', 'Leave request submitted successfully.');
       onSuccess?.();
       onBack();
     } catch (err) {
@@ -180,6 +265,16 @@ export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
       setLoading(false);
     }
   };
+
+  if (loadingEntry) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <StatusBar style="light" />
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading leave details...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -202,9 +297,13 @@ export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
             <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
-            <Text style={styles.headerTitle}>Add Leave</Text>
+            <Text style={styles.headerTitle}>
+              {isEditMode ? 'Edit Leave' : 'Add Leave'}
+            </Text>
             <Text style={styles.headerSubtitle}>
-              Submit a new leave request
+              {isEditMode
+                ? 'Update your leave request'
+                : 'Submit a new leave request'}
             </Text>
           </LinearGradient>
 
@@ -273,7 +372,7 @@ export function LeaveEntryForm({ session, onBack, onSuccess }: Props) {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Button
-                label="Submit Leave"
+                label={isEditMode ? 'Save Changes' : 'Submit Leave'}
                 onPress={handleSubmit}
                 loading={loading}
                 disabled={countLoading || leaveCount === null}
@@ -293,6 +392,15 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.lg,
   },
   header: {
     paddingTop: spacing.xxxl + spacing.md,

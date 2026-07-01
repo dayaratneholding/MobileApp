@@ -1,12 +1,15 @@
-import { getHcmJson, postHcmJson } from '../client/hcmClient';
+import { getHcmJson, postHcmJson, putHcmJson } from '../client/hcmClient';
 import type {
   CreateEmployeeLeaveCommand,
   GetCalendarLeaveCountRequest,
+  GetLeaveEntryDto,
+  GetLeaveEntryResult,
   Int32Result,
   LeaveCountResult,
   MobileLeaveListPage,
   MobileLeavePaginatedResultResult,
   MobileLeaveQuery,
+  UpdateEmployeeLeaveEntryCommand,
 } from '../../types/leave';
 
 type CalendarLeaveCountApiBody = GetCalendarLeaveCountRequest;
@@ -159,4 +162,54 @@ export async function getMobileLeaveEntries(
     totalCount: page?.totalCount ?? 0,
     hasNextPage: page?.hasNextPage ?? false,
   };
+}
+
+function parseLeaveEntryResponse(
+  result: GetLeaveEntryDto | GetLeaveEntryResult,
+): GetLeaveEntryDto {
+  if ('empLeaveSerialID' in result && typeof result.empLeaveSerialID === 'number') {
+    return result;
+  }
+
+  const wrapped = result as GetLeaveEntryResult;
+  if (wrapped.succeeded === false) {
+    throw new Error(wrapped.messages?.[0] ?? 'Failed to load leave record.');
+  }
+
+  if (!wrapped.data) {
+    throw new Error('Leave record not found.');
+  }
+
+  return wrapped.data;
+}
+
+export async function getLeaveEntitlementById(
+  id: number,
+): Promise<GetLeaveEntryDto> {
+  if (__DEV__) {
+    console.log('[Leave] LeaveEntitlements GET id:', id);
+  }
+
+  const result = await getHcmJson<GetLeaveEntryDto | GetLeaveEntryResult>(
+    `/LeaveEntitlements/${id}`,
+  );
+
+  return parseLeaveEntryResponse(result);
+}
+
+export async function updateLeaveEntitlement(
+  payload: UpdateEmployeeLeaveEntryCommand,
+): Promise<void> {
+  if (__DEV__) {
+    console.log('[Leave] LeaveEntitlements/update payload:', payload);
+  }
+
+  const result = await putHcmJson<Int32Result, UpdateEmployeeLeaveEntryCommand>(
+    '/LeaveEntitlements/update',
+    payload,
+  );
+
+  if (!result.succeeded) {
+    throw new Error(result.messages?.[0] ?? 'Failed to update leave request.');
+  }
 }
