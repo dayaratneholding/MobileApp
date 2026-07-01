@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   Pressable,
@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
+import { LeaveHomeScreen } from '../leave/LeaveHomeScreen';
 
 type Props = {
   session: AuthSession;
@@ -67,12 +68,22 @@ const widgets: Widget[] = [
 ];
 
 export function Dashboard({ session, onLogout }: Props) {
+  const [activeScreen, setActiveScreen] = useState<'main' | 'leave'>('main');
   const name = session.userName || session.userID;
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     day: 'numeric',
     month: 'short',
   });
+
+  if (activeScreen === 'leave') {
+    return (
+      <LeaveHomeScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -130,7 +141,15 @@ export function Dashboard({ session, onLogout }: Props) {
           <Text style={styles.sectionTitle}>Services</Text>
           <View style={styles.grid}>
             {widgets.map((w) => (
-              <Pressable key={w.key} style={styles.widgetCard}>
+              <Pressable
+                key={w.key}
+                style={styles.widgetCard}
+                onPress={
+                  w.key === 'leave'
+                    ? () => setActiveScreen('leave')
+                    : undefined
+                }
+              >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
                   <Text style={styles.widgetEmoji}>{w.emoji}</Text>
                 </View>
@@ -147,7 +166,11 @@ export function Dashboard({ session, onLogout }: Props) {
           <View style={styles.linksCard}>
             <Row emoji="✅" label="Mark Attendance" />
             <Divider />
-            <Row emoji="📝" label="Apply for Leave" />
+            <Row
+              emoji="📝"
+              label="Apply for Leave"
+              onPress={() => setActiveScreen('leave')}
+            />
             <Divider />
             <Row emoji="📄" label="View Payslip" />
             <Divider />
@@ -162,14 +185,16 @@ export function Dashboard({ session, onLogout }: Props) {
 function Row({
   emoji,
   label,
+  onPress,
   last = false,
 }: {
   emoji: string;
   label: string;
+  onPress?: () => void;
   last?: boolean;
 }) {
   return (
-    <Pressable style={styles.row}>
+    <Pressable style={styles.row} onPress={onPress}>
       <Text style={styles.rowEmoji}>{emoji}</Text>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowChevron}>›</Text>
