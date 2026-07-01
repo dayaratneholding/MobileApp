@@ -11,31 +11,107 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { login } from '../../api/endpoints/auth';
+import { getUserCompanies } from '../../api/endpoints/companies';
+import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
+import { CompanyPicker } from '../../components/forms/CompanyPicker';
 import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import type { AuthSession, UserCompany } from '../../types/api';
 
 type Props = {
-  onLogin: (email: string) => void;
+  onLogin: (session: AuthSession) => void;
 };
 
 export function LoginScreen({ onLogin }: Props) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [companies, setCompanies] = useState<UserCompany[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<UserCompany | null>(null);
+  const [companiesLoaded, setCompaniesLoaded] = useState(false);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [loadingLogin, setLoadingLogin] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = () => {
-    if (!email.trim() || !password.trim()) {
-      setError('Please enter your email and password.');
+  const handleLoadCompanies = async () => {
+    if (!username.trim()) {
+      setError('Please enter your username.');
       return;
     }
+
     setError('');
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      onLogin(email.trim());
-    }, 900);
+    setLoadingCompanies(true);
+    setCompanies([]);
+    setSelectedCompany(null);
+    setCompaniesLoaded(false);
+    setPassword('');
+
+    try {
+      const result = await getUserCompanies(username.trim());
+
+      if (result.length === 0) {
+        setError('No companies found for this username.');
+      }
+
+      setCompanies(result);
+      setCompaniesLoaded(true);
+
+      if (result.length === 1) {
+        setSelectedCompany(result[0]);
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+      setCompaniesLoaded(false);
+    } finally {
+      setLoadingCompanies(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!username.trim()) {
+      setError('Please enter your username.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
+    if (!selectedCompany?.comSerialID) {
+      setError('Please select a company.');
+      return;
+    }
+
+    setError('');
+    setLoadingLogin(true);
+
+    try {
+      const session = await login({
+        userID: username.trim(),
+        comSerialID: Number(selectedCompany.comSerialID),
+        password,
+        company: selectedCompany,
+      });
+
+      onLogin(session);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setLoadingLogin(false);
+    }
+  };
+
+  const handleUsernameChange = (value: string) => {
+    setUsername(value);
+    if (companiesLoaded) {
+      setCompaniesLoaded(false);
+      setCompanies([]);
+      setSelectedCompany(null);
+      setPassword('');
+      setError('');
+    }
   };
 
   return (
@@ -73,28 +149,69 @@ export function LoginScreen({ onLogin }: Props) {
             <Text style={styles.cardTitle}>Login to your account</Text>
 
             <TextField
-              label="Email"
-              placeholder="you@company.com"
+              label="Username"
+              placeholder="Enter your username"
               autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
+              value={username}
+              onChangeText={handleUsernameChange}
+              onSubmitEditing={handleLoadCompanies}
+              returnKeyType="next"
             />
 
-            <TextField
-              label="Password"
-              placeholder="Enter your password"
-              isPassword
-              value={password}
-              onChangeText={setPassword}
-              error={error || undefined}
-            />
+            {!companiesLoaded ? (
+              <Button
+                label="Continue"
+                onPress={handleLoadCompanies}
+                loading={loadingCompanies}
+                variant="outline"
+              />
+            ) : (
+              <>
+                <CompanyPicker
+                  companies={companies}
+                  selected={selectedCompany}
+                  loading={loadingCompanies}
+                  onSelect={setSelectedCompany}
+                />
 
-            <Pressable style={styles.forgot} hitSlop={8}>
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </Pressable>
+                <TextField
+                  label="Password"
+                  placeholder="Enter your password"
+                  isPassword
+                  value={password}
+                  onChangeText={setPassword}
+                  error={error || undefined}
+                />
 
-            <Button label="Sign In" onPress={handleLogin} loading={loading} />
+                <Pressable style={styles.forgot} hitSlop={8}>
+                  <Text style={styles.forgotText}>Forgot password?</Text>
+                </Pressable>
+
+                <Button
+                  label="Sign In"
+                  onPress={handleLogin}
+                  loading={loadingLogin}
+                  disabled={!selectedCompany}
+                />
+
+                <Pressable
+                  style={styles.changeUser}
+                  onPress={() => {
+                    setCompaniesLoaded(false);
+                    setCompanies([]);
+                    setSelectedCompany(null);
+                    setPassword('');
+                    setError('');
+                  }}
+                >
+                  <Text style={styles.changeUserText}>Change username</Text>
+                </Pressable>
+              </>
+            )}
+
+            {!companiesLoaded && error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : null}
           </View>
 
           <Text style={styles.footerText}>
@@ -171,6 +288,20 @@ const styles = StyleSheet.create({
   forgotText: {
     ...typography.label,
     color: colors.primary,
+  },
+  changeUser: {
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+  },
+  changeUserText: {
+    ...typography.label,
+    color: colors.textSecondary,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
   footerText: {
     ...typography.body,
