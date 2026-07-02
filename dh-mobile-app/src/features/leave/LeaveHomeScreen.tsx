@@ -13,15 +13,27 @@ import { fetchLeaveBalances } from '../../api/endpoints/leave';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
 import type { LeaveBalanceSummary } from '../../types/leave';
+import type { MobileShortLeaveEntry } from '../../types/shortLeave';
 import { LeaveEntryForm } from './LeaveEntryForm';
+import { ShortLeaveEntryForm } from './ShortLeaveEntryForm';
+import { ViewLeaveBalanceScreen } from './ViewLeaveBalanceScreen';
 import { ViewLeaveScreen } from './ViewLeaveScreen';
+import { ViewShortLeaveScreen } from './ViewShortLeaveScreen';
 
 type Props = {
   session: AuthSession;
   onBack: () => void;
 };
 
-type Screen = 'home' | 'add-leave' | 'view-leave' | 'edit-leave';
+type Screen =
+  | 'home'
+  | 'add-leave'
+  | 'view-leave'
+  | 'edit-leave'
+  | 'add-short-leave'
+  | 'view-short-leave'
+  | 'edit-short-leave'
+  | 'view-balance';
 
 type LeaveWidget = {
   key: string;
@@ -51,9 +63,25 @@ const leaveWidgets: LeaveWidget[] = [
     accent: colors.success,
   },
   {
+    key: 'add-short-leave',
+    title: 'Add Short Leave',
+    subtitle: 'Submit a short leave',
+    emoji: '⏱️',
+    tint: '#EDE9FE',
+    accent: '#7C3AED',
+  },
+  {
+    key: 'view-short-leave',
+    title: 'View Short Leave',
+    subtitle: 'See short leave history',
+    emoji: '📝',
+    tint: '#FFE4E6',
+    accent: colors.danger,
+  },
+  {
     key: 'view-balance',
     title: 'View Leave Balance',
-    subtitle: 'Annual, casual & short leave',
+    subtitle: 'Annual, casual, medical & no pay',
     emoji: '📊',
     tint: '#FEF3C7',
     accent: colors.warning,
@@ -64,6 +92,7 @@ const leaveWidgets: LeaveWidget[] = [
 type BalanceRow = {
   key: string;
   label: string;
+  taken: number | null;
   remaining: number | null;
   total: number | null;
   unit: string;
@@ -90,6 +119,7 @@ function buildBalanceRows(
     {
       key: 'annual',
       label: 'Annual',
+      taken: balances.annual?.taken ?? null,
       remaining: balances.annual?.remaining ?? null,
       total: balances.annual?.total ?? null,
       unit: 'days',
@@ -98,6 +128,7 @@ function buildBalanceRows(
     {
       key: 'casual',
       label: 'Casual',
+      taken: balances.casual?.taken ?? null,
       remaining: balances.casual?.remaining ?? null,
       total: balances.casual?.total ?? null,
       unit: 'days',
@@ -106,7 +137,8 @@ function buildBalanceRows(
     {
       key: 'short',
       label: `Short Leave (${monthLabel})`,
-      remaining: balances.shortLeaveThisMonth,
+      taken: balances.shortLeaveThisMonth,
+      remaining: null,
       total: null,
       unit: 'this month',
       color: colors.warning,
@@ -114,21 +146,37 @@ function buildBalanceRows(
   ];
 }
 
-function sumAnnualAndCasual(balances: LeaveBalanceSummary): number | null {
-  const annual = balances.annual?.remaining ?? null;
-  const casual = balances.casual?.remaining ?? null;
+function sumTakenAndRemaining(balances: LeaveBalanceSummary): {
+  taken: number | null;
+  remaining: number | null;
+} {
+  const annualTaken = balances.annual?.taken ?? null;
+  const casualTaken = balances.casual?.taken ?? null;
+  const annualRemaining = balances.annual?.remaining ?? null;
+  const casualRemaining = balances.casual?.remaining ?? null;
 
-  if (annual === null && casual === null) {
-    return null;
+  if (
+    annualTaken === null &&
+    casualTaken === null &&
+    annualRemaining === null &&
+    casualRemaining === null
+  ) {
+    return { taken: null, remaining: null };
   }
 
-  return (annual ?? 0) + (casual ?? 0);
+  return {
+    taken: (annualTaken ?? 0) + (casualTaken ?? 0),
+    remaining: (annualRemaining ?? 0) + (casualRemaining ?? 0),
+  };
 }
 
 export function LeaveHomeScreen({ session, onBack }: Props) {
   const [screen, setScreen] = useState<Screen>('home');
   const [editLeaveId, setEditLeaveId] = useState<number | null>(null);
+  const [editShortLeaveEntry, setEditShortLeaveEntry] =
+    useState<MobileShortLeaveEntry | null>(null);
   const [viewLeaveRefreshKey, setViewLeaveRefreshKey] = useState(0);
+  const [viewShortLeaveRefreshKey, setViewShortLeaveRefreshKey] = useState(0);
   const [balances, setBalances] = useState<LeaveBalanceSummary | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [balancesError, setBalancesError] = useState<string | null>(null);
@@ -138,7 +186,7 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
     balances ?? { annual: null, casual: null, shortLeaveThisMonth: null },
     monthLabel,
   );
-  const totalRemaining = balances ? sumAnnualAndCasual(balances) : null;
+  const balanceTotals = balances ? sumTakenAndRemaining(balances) : null;
 
   const loadBalances = useCallback(async () => {
     const eeSerialID = session.eESerialID;
@@ -209,6 +257,57 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
     );
   }
 
+  if (screen === 'add-short-leave') {
+    return (
+      <ShortLeaveEntryForm
+        session={session}
+        onBack={() => setScreen('home')}
+        onSuccess={() => {
+          setViewShortLeaveRefreshKey((key) => key + 1);
+          setScreen('view-short-leave');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'view-short-leave') {
+    return (
+      <ViewShortLeaveScreen
+        key={viewShortLeaveRefreshKey}
+        session={session}
+        refreshKey={viewShortLeaveRefreshKey}
+        onBack={() => setScreen('home')}
+        onEditShortLeave={(entry) => {
+          setEditShortLeaveEntry(entry);
+          setScreen('edit-short-leave');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'edit-short-leave' && editShortLeaveEntry != null) {
+    return (
+      <ShortLeaveEntryForm
+        session={session}
+        editEntry={editShortLeaveEntry}
+        onBack={() => setScreen('view-short-leave')}
+        onSuccess={() => {
+          setViewShortLeaveRefreshKey((key) => key + 1);
+          setScreen('view-short-leave');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'view-balance') {
+    return (
+      <ViewLeaveBalanceScreen
+        session={session}
+        onBack={() => setScreen('home')}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -237,22 +336,33 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
 
         <View style={styles.body}>
           <View style={styles.summaryCard}>
-            <View>
-              <Text style={styles.summaryLabel}>TOTAL LEAVE BALANCE</Text>
+            <View style={styles.summaryMain}>
+              <Text style={styles.summaryLabel}>LEAVE BALANCE</Text>
               {balancesLoading ? (
                 <ActivityIndicator
                   color={colors.primary}
                   style={styles.summaryLoader}
                 />
               ) : (
-                <Text style={styles.summaryValue}>
-                  {formatBalanceValue(totalRemaining)}
-                  {totalRemaining !== null ? ' days' : ''}
-                </Text>
+                <View style={styles.summaryStats}>
+                  <View style={styles.summaryStat}>
+                    <Text style={styles.summaryStatValue}>
+                      {formatBalanceValue(balanceTotals?.taken ?? null)}
+                    </Text>
+                    <Text style={styles.summaryStatLabel}>Taken</Text>
+                  </View>
+                  <View style={styles.summaryDivider} />
+                  <View style={styles.summaryStat}>
+                    <Text style={[styles.summaryStatValue, styles.summaryRemaining]}>
+                      {formatBalanceValue(balanceTotals?.remaining ?? null)}
+                    </Text>
+                    <Text style={styles.summaryStatLabel}>Remaining</Text>
+                  </View>
+                </View>
               )}
             </View>
             <View style={styles.summaryBadge}>
-              <Text style={styles.summaryBadgeText}>Available</Text>
+              <Text style={styles.summaryBadgeText}>Annual + Casual</Text>
             </View>
           </View>
 
@@ -267,7 +377,13 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
                     ? () => setScreen('add-leave')
                     : widget.key === 'view-leave'
                       ? () => setScreen('view-leave')
-                      : undefined
+                      : widget.key === 'add-short-leave'
+                        ? () => setScreen('add-short-leave')
+                        : widget.key === 'view-short-leave'
+                          ? () => setScreen('view-short-leave')
+                          : widget.key === 'view-balance'
+                            ? () => setScreen('view-balance')
+                            : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: widget.tint }]}>
@@ -306,9 +422,7 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
                 const pct =
                   item.total && item.remaining !== null
                     ? Math.max(0, Math.min(1, item.remaining / item.total))
-                    : item.remaining !== null
-                      ? 1
-                      : 0;
+                    : 0;
 
                 return (
                   <View
@@ -318,32 +432,45 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
                       index !== balanceRows.length - 1 && styles.balanceSpacing,
                     ]}
                   >
-                    <View style={styles.balanceTop}>
-                      <Text style={styles.balanceLabel}>{item.label}</Text>
-                      <Text style={styles.balanceValue}>
-                        {formatBalanceValue(item.remaining)}
-                        {item.total !== null ? (
-                          <Text style={styles.balanceTotal}>
-                            {' '}
-                            / {formatBalanceValue(item.total)} {item.unit}
-                          </Text>
-                        ) : item.remaining !== null ? (
-                          <Text style={styles.balanceTotal}> {item.unit}</Text>
-                        ) : null}
-                      </Text>
+                    <Text style={styles.balanceLabel}>{item.label}</Text>
+                    <View style={styles.balanceStats}>
+                      <View style={styles.balanceStat}>
+                        <Text style={styles.balanceStatLabel}>Taken</Text>
+                        <Text style={styles.balanceStatValue}>
+                          {formatBalanceValue(item.taken)}
+                          {item.taken !== null && item.key !== 'short' ? (
+                            <Text style={styles.balanceStatUnit}> days</Text>
+                          ) : item.taken !== null ? (
+                            <Text style={styles.balanceStatUnit}> {item.unit}</Text>
+                          ) : null}
+                        </Text>
+                      </View>
+                      <View style={styles.balanceStat}>
+                        <Text style={styles.balanceStatLabel}>Remaining</Text>
+                        <Text style={[styles.balanceStatValue, styles.balanceRemaining]}>
+                          {formatBalanceValue(item.remaining)}
+                          {item.remaining !== null ? (
+                            <Text style={styles.balanceStatUnit}> days</Text>
+                          ) : item.key === 'short' ? (
+                            <Text style={styles.balanceStatUnit}> —</Text>
+                          ) : null}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.track}>
-                      <View
-                        style={[
-                          styles.trackFill,
-                          {
-                            width: `${pct * 100}%`,
-                            backgroundColor: item.color,
-                            opacity: item.remaining !== null ? 1 : 0.25,
-                          },
-                        ]}
-                      />
-                    </View>
+                    {item.total !== null ? (
+                      <View style={styles.track}>
+                        <View
+                          style={[
+                            styles.trackFill,
+                            {
+                              width: `${pct * 100}%`,
+                              backgroundColor: item.color,
+                              opacity: item.remaining !== null ? 1 : 0.25,
+                            },
+                          ]}
+                        />
+                      </View>
+                    ) : null}
                   </View>
                 );
               })}
@@ -411,6 +538,35 @@ const styles = StyleSheet.create({
     marginTop: -spacing.xxxl,
     marginBottom: spacing.xl,
     ...shadow.card,
+  },
+  summaryMain: {
+    flex: 1,
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  summaryStat: {
+    flex: 1,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.lg,
+  },
+  summaryStatValue: {
+    ...typography.h2,
+    color: colors.text,
+  },
+  summaryRemaining: {
+    color: colors.primary,
+  },
+  summaryStatLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   summaryLabel: {
     ...typography.caption,
@@ -517,21 +673,31 @@ const styles = StyleSheet.create({
   balanceSpacing: {
     marginBottom: spacing.lg,
   },
-  balanceTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: spacing.sm,
-  },
   balanceLabel: {
     ...typography.title,
     color: colors.text,
+    marginBottom: spacing.sm,
   },
-  balanceValue: {
+  balanceStats: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+  },
+  balanceStat: {
+    flex: 1,
+  },
+  balanceStatLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: 2,
+  },
+  balanceStatValue: {
     ...typography.title,
     color: colors.text,
   },
-  balanceTotal: {
+  balanceRemaining: {
+    color: colors.primary,
+  },
+  balanceStatUnit: {
     ...typography.caption,
     color: colors.textMuted,
   },

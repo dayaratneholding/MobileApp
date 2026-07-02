@@ -121,6 +121,7 @@ export type GetShortLeaveCountRequest = {
 };
 
 export type LeaveBalanceItem = {
+  taken: number;
   remaining: number;
   total: number;
 };
@@ -129,6 +130,20 @@ export type LeaveBalanceSummary = {
   annual: LeaveBalanceItem | null;
   casual: LeaveBalanceItem | null;
   shortLeaveThisMonth: number | null;
+};
+
+export type LeaveYearBalanceItem = {
+  taken: number | null;
+  entitlement: number | null;
+};
+
+export type YearLeaveAllocationSummary = {
+  year: number;
+  annual: LeaveYearBalanceItem | null;
+  casual: LeaveYearBalanceItem | null;
+  medical: LeaveYearBalanceItem | null;
+  noPayAuthorized: LeaveYearBalanceItem | null;
+  noPayUnauthorized: LeaveYearBalanceItem | null;
 };
 
 export type LeaveCountResult = {

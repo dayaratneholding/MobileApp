@@ -9,6 +9,8 @@ import type {
   Int32Result,
   LeaveBalanceItem,
   LeaveBalanceSummary,
+  LeaveYearBalanceItem,
+  YearLeaveAllocationSummary,
   LeaveCountResult,
   MobileLeaveListPage,
   MobileLeavePaginatedResultResult,
@@ -137,6 +139,7 @@ function parseEntitlementBalance(
   }
 
   return {
+    taken,
     remaining: Math.max(0, total - taken),
     total,
   };
@@ -239,6 +242,154 @@ async function postLeaveAllocationShortLeave(
     }
     return null;
   }
+}
+
+function parseYearLeaveBalance(
+  result: unknown,
+  entitlementKeys: string[],
+  takenKeys: string[],
+): LeaveYearBalanceItem | null {
+  if (!result || typeof result !== 'object') {
+    return null;
+  }
+
+  const record = result as Record<string, unknown>;
+  let taken = readObjectField(record, takenKeys);
+  let entitlement = readObjectField(record, entitlementKeys);
+
+  if (taken === null || entitlement === null) {
+    for (const [key, value] of Object.entries(record)) {
+      const count = coerceCount(value);
+      if (count === null) {
+        continue;
+      }
+
+      const lowerKey = key.toLowerCase();
+      if (taken === null && lowerKey.includes('taken')) {
+        taken = count;
+      }
+      if (
+        entitlement === null &&
+        (lowerKey.includes('entitlement') ||
+          lowerKey.includes('leave') ||
+          lowerKey.includes('allowed')) &&
+        !lowerKey.includes('taken')
+      ) {
+        entitlement = count;
+      }
+    }
+  }
+
+  if (taken === null && entitlement === null) {
+    return null;
+  }
+
+  return { taken, entitlement };
+}
+
+async function postLeaveAllocationYearBalance(
+  path: string,
+  body: GetLeaveCalculationRequest,
+  entitlementKeys: string[],
+  takenKeys: string[],
+): Promise<LeaveYearBalanceItem | null> {
+  try {
+    if (__DEV__) {
+      console.log(`[Leave] ${path} request:`, body);
+    }
+
+    const result = await postHcmJson<unknown, GetLeaveCalculationRequest>(
+      path,
+      body,
+    );
+
+    if (__DEV__) {
+      console.log(`[Leave] ${path} response:`, result);
+    }
+
+    return parseYearLeaveBalance(result, entitlementKeys, takenKeys);
+  } catch (error) {
+    if (__DEV__) {
+      console.warn(`[Leave] ${path} failed:`, error);
+    }
+    return null;
+  }
+}
+
+export async function fetchYearLeaveAllocationBalances(
+  eeSerialID: number,
+  comSerialID: number,
+): Promise<YearLeaveAllocationSummary> {
+  const body: GetLeaveCalculationRequest = { eeSerialID, comSerialID };
+  const year = new Date().getFullYear();
+
+  const [
+    annual,
+    casual,
+    medical,
+    noPayAuthorized,
+    noPayUnauthorized,
+  ] = await Promise.all([
+    postLeaveAllocationYearBalance(
+      '/LeaveAllocation/AnnualLeave',
+      body,
+      ['annualLeaveEntitlement', 'annual'],
+      ['annualLeaveTaken'],
+    ),
+    postLeaveAllocationYearBalance(
+      '/LeaveAllocation/Casual',
+      body,
+      ['casssualLEave', 'casualLeave', 'casualLEave', 'casual'],
+      ['cassualLeavetaken', 'casualLeaveTaken', 'casualLeavetaken'],
+    ),
+    postLeaveAllocationYearBalance(
+      '/LeaveAllocation/MedicalLeave',
+      body,
+      ['medicalLeaveEntitlement', 'medicalLeave', 'medical'],
+      ['medicalLeaveTaken', 'medicalLeavetaken'],
+    ),
+    postLeaveAllocationYearBalance(
+      '/LeaveAllocation/NoPayAuthorized',
+      body,
+      ['noPayAuthorizedEntitlement', 'noPayAuthorizedLeave', 'noPayAuthorized'],
+      ['noPayAuthorizedTaken', 'noPayAuthorizedLeavetaken'],
+    ),
+    postLeaveAllocationYearBalance(
+      '/LeaveAllocation/NoPayUnauthorized',
+      body,
+      [
+        'noPayUnauthorizedEntitlement',
+        'noPayUnauthorizedLeave',
+        'noPayUnauthorized',
+      ],
+      ['noPayUnauthorizedTaken', 'noPayUnauthorizedLeavetaken'],
+    ),
+  ]);
+
+  const summary: YearLeaveAllocationSummary = {
+    year,
+    annual,
+    casual,
+    medical,
+    noPayAuthorized,
+    noPayUnauthorized,
+  };
+
+  if (
+    annual === null &&
+    casual === null &&
+    medical === null &&
+    noPayAuthorized === null &&
+    noPayUnauthorized === null
+  ) {
+    throw new Error('Could not load leave allocation balances for this year.');
+  }
+
+  if (__DEV__) {
+    console.log('[Leave] Year allocation summary:', summary);
+  }
+
+  return summary;
 }
 
 export async function fetchLeaveBalances(
