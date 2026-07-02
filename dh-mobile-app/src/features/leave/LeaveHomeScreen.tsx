@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,8 +9,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { fetchLeaveBalances } from '../../api/endpoints/leave';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
+import type { LeaveBalanceSummary } from '../../types/leave';
 import { LeaveEntryForm } from './LeaveEntryForm';
 import { ViewLeaveScreen } from './ViewLeaveScreen';
 
@@ -50,7 +53,7 @@ const leaveWidgets: LeaveWidget[] = [
   {
     key: 'view-balance',
     title: 'View Leave Balance',
-    subtitle: 'Annual, casual & sick',
+    subtitle: 'Annual, casual & short leave',
     emoji: '📊',
     tint: '#FEF3C7',
     accent: colors.warning,
@@ -58,18 +61,114 @@ const leaveWidgets: LeaveWidget[] = [
   },
 ];
 
-const leaveBalances = [
-  { key: 'annual', label: 'Annual', remaining: 8, total: 14, color: colors.primary },
-  { key: 'casual', label: 'Casual', remaining: 4, total: 7, color: colors.accent },
-  { key: 'sick', label: 'Sick', remaining: 6, total: 7, color: colors.warning },
-];
+type BalanceRow = {
+  key: string;
+  label: string;
+  remaining: number | null;
+  total: number | null;
+  unit: string;
+  color: string;
+};
+
+function formatBalanceValue(value: number | null): string {
+  if (value === null) {
+    return '—';
+  }
+
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(1);
+}
+
+function buildBalanceRows(
+  balances: LeaveBalanceSummary,
+  monthLabel: string,
+): BalanceRow[] {
+  return [
+    {
+      key: 'annual',
+      label: 'Annual',
+      remaining: balances.annual?.remaining ?? null,
+      total: balances.annual?.total ?? null,
+      unit: 'days',
+      color: colors.primary,
+    },
+    {
+      key: 'casual',
+      label: 'Casual',
+      remaining: balances.casual?.remaining ?? null,
+      total: balances.casual?.total ?? null,
+      unit: 'days',
+      color: colors.accent,
+    },
+    {
+      key: 'short',
+      label: `Short Leave (${monthLabel})`,
+      remaining: balances.shortLeaveThisMonth,
+      total: null,
+      unit: 'this month',
+      color: colors.warning,
+    },
+  ];
+}
+
+function sumAnnualAndCasual(balances: LeaveBalanceSummary): number | null {
+  const annual = balances.annual?.remaining ?? null;
+  const casual = balances.casual?.remaining ?? null;
+
+  if (annual === null && casual === null) {
+    return null;
+  }
+
+  return (annual ?? 0) + (casual ?? 0);
+}
 
 export function LeaveHomeScreen({ session, onBack }: Props) {
   const [screen, setScreen] = useState<Screen>('home');
   const [editLeaveId, setEditLeaveId] = useState<number | null>(null);
   const [viewLeaveRefreshKey, setViewLeaveRefreshKey] = useState(0);
+  const [balances, setBalances] = useState<LeaveBalanceSummary | null>(null);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+  const [balancesError, setBalancesError] = useState<string | null>(null);
   const name = session.userName || session.userID;
-  const totalRemaining = leaveBalances.reduce((sum, b) => sum + b.remaining, 0);
+  const monthLabel = new Date().toLocaleString('default', { month: 'short' });
+  const balanceRows = buildBalanceRows(
+    balances ?? { annual: null, casual: null, shortLeaveThisMonth: null },
+    monthLabel,
+  );
+  const totalRemaining = balances ? sumAnnualAndCasual(balances) : null;
+
+  const loadBalances = useCallback(async () => {
+    const eeSerialID = session.eESerialID;
+    const comSerialID = session.comSerialID;
+
+    if (!eeSerialID) {
+      setBalancesError('Employee ID not found in session.');
+      return;
+    }
+
+    setBalancesLoading(true);
+    setBalancesError(null);
+
+    try {
+      const summary = await fetchLeaveBalances(eeSerialID, comSerialID);
+      setBalances(summary);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load leave balances.';
+      setBalancesError(message);
+    } finally {
+      setBalancesLoading(false);
+    }
+  }, [session.comSerialID, session.eESerialID]);
+
+  useEffect(() => {
+    if (screen === 'home') {
+      loadBalances();
+    }
+  }, [screen, loadBalances]);
 
   if (screen === 'add-leave') {
     return (
@@ -140,7 +239,17 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
           <View style={styles.summaryCard}>
             <View>
               <Text style={styles.summaryLabel}>TOTAL LEAVE BALANCE</Text>
-              <Text style={styles.summaryValue}>{totalRemaining} days</Text>
+              {balancesLoading ? (
+                <ActivityIndicator
+                  color={colors.primary}
+                  style={styles.summaryLoader}
+                />
+              ) : (
+                <Text style={styles.summaryValue}>
+                  {formatBalanceValue(totalRemaining)}
+                  {totalRemaining !== null ? ' days' : ''}
+                </Text>
+              )}
             </View>
             <View style={styles.summaryBadge}>
               <Text style={styles.summaryBadgeText}>Available</Text>
@@ -175,35 +284,69 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
 
           <Text style={styles.sectionTitle}>Leave balance</Text>
           <View style={styles.balanceCard}>
-            {leaveBalances.map((item, index) => {
-              const pct = Math.max(0, Math.min(1, item.remaining / item.total));
+            {balancesLoading && (
+              <View style={styles.balanceLoading}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.balanceLoadingText}>Loading balances…</Text>
+              </View>
+            )}
 
-              return (
-                <View
-                  key={item.key}
-                  style={[
-                    styles.balanceRow,
-                    index !== leaveBalances.length - 1 && styles.balanceSpacing,
-                  ]}
-                >
-                  <View style={styles.balanceTop}>
-                    <Text style={styles.balanceLabel}>{item.label}</Text>
-                    <Text style={styles.balanceValue}>
-                      {item.remaining}
-                      <Text style={styles.balanceTotal}> / {item.total} days</Text>
-                    </Text>
+            {!balancesLoading && balancesError && (
+              <View style={styles.balanceError}>
+                <Text style={styles.balanceErrorText}>{balancesError}</Text>
+                <Pressable onPress={loadBalances} hitSlop={8}>
+                  <Text style={styles.balanceRetry}>Retry</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {!balancesLoading &&
+              !balancesError &&
+              balanceRows.map((item, index) => {
+                const pct =
+                  item.total && item.remaining !== null
+                    ? Math.max(0, Math.min(1, item.remaining / item.total))
+                    : item.remaining !== null
+                      ? 1
+                      : 0;
+
+                return (
+                  <View
+                    key={item.key}
+                    style={[
+                      styles.balanceRow,
+                      index !== balanceRows.length - 1 && styles.balanceSpacing,
+                    ]}
+                  >
+                    <View style={styles.balanceTop}>
+                      <Text style={styles.balanceLabel}>{item.label}</Text>
+                      <Text style={styles.balanceValue}>
+                        {formatBalanceValue(item.remaining)}
+                        {item.total !== null ? (
+                          <Text style={styles.balanceTotal}>
+                            {' '}
+                            / {formatBalanceValue(item.total)} {item.unit}
+                          </Text>
+                        ) : item.remaining !== null ? (
+                          <Text style={styles.balanceTotal}> {item.unit}</Text>
+                        ) : null}
+                      </Text>
+                    </View>
+                    <View style={styles.track}>
+                      <View
+                        style={[
+                          styles.trackFill,
+                          {
+                            width: `${pct * 100}%`,
+                            backgroundColor: item.color,
+                            opacity: item.remaining !== null ? 1 : 0.25,
+                          },
+                        ]}
+                      />
+                    </View>
                   </View>
-                  <View style={styles.track}>
-                    <View
-                      style={[
-                        styles.trackFill,
-                        { width: `${pct * 100}%`, backgroundColor: item.color },
-                      ]}
-                    />
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })}
           </View>
         </View>
       </ScrollView>
@@ -280,6 +423,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: spacing.xs,
   },
+  summaryLoader: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
   summaryBadge: {
     backgroundColor: '#DCFCE7',
     paddingHorizontal: spacing.lg,
@@ -342,6 +489,29 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.xl,
     ...shadow.soft,
+  },
+  balanceLoading: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  balanceLoadingText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  balanceError: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  balanceErrorText: {
+    ...typography.caption,
+    color: colors.danger,
+    textAlign: 'center',
+  },
+  balanceRetry: {
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   balanceRow: {},
   balanceSpacing: {

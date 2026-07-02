@@ -108,6 +108,29 @@ export type GetCalendarLeaveCountRequest = {
   isHalfDay: boolean;
 };
 
+export type GetLeaveCalculationRequest = {
+  eeSerialID: number;
+  comSerialID: number;
+};
+
+export type GetShortLeaveCountRequest = {
+  eeSerialID: number;
+  year: number;
+  month: number;
+  ComSerialID: number;
+};
+
+export type LeaveBalanceItem = {
+  remaining: number;
+  total: number;
+};
+
+export type LeaveBalanceSummary = {
+  annual: LeaveBalanceItem | null;
+  casual: LeaveBalanceItem | null;
+  shortLeaveThisMonth: number | null;
+};
+
 export type LeaveCountResult = {
   succeeded: boolean;
   messages?: string[] | null;
@@ -117,6 +140,7 @@ export type LeaveCountResult = {
 
 export type MobileLeaveQuery = {
   status?: boolean;
+  active?: boolean;
   PageNumber?: number;
   PageSize?: number;
   EESerialID?: number;

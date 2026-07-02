@@ -26,14 +26,13 @@ type Props = {
 
 const PAGE_SIZE = 10;
 
-function formatDate(value?: string | null): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleDateString();
-}
-
-function isValidDateString(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
-}
+import {
+  formatLeaveDate,
+  isValidDateString,
+  toApiDateTime,
+  toDateInputValue,
+  todayDateString,
+} from '../../utils/leaveDates';
 
 function matchesDateFrom(item: MobileLeaveEntry, dateFromFilter: string): boolean {
   if (!dateFromFilter) return true;
@@ -88,12 +87,12 @@ function LeaveRecordCard({
 
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>From</Text>
-        <Text style={styles.detailValue}>{formatDate(item.dateFrom)}</Text>
+        <Text style={styles.detailValue}>{formatLeaveDate(item.dateFrom)}</Text>
       </View>
 
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>To</Text>
-        <Text style={styles.detailValue}>{formatDate(item.dateTo)}</Text>
+        <Text style={styles.detailValue}>{formatLeaveDate(item.dateTo)}</Text>
       </View>
 
       <View style={styles.detailRow}>
@@ -110,7 +109,7 @@ function LeaveRecordCard({
 
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Applied</Text>
-        <Text style={styles.detailValue}>{formatDate(item.createdDate)}</Text>
+        <Text style={styles.detailValue}>{formatLeaveDate(item.createdDate)}</Text>
       </View>
 
       {showEdit ? (
@@ -147,11 +146,14 @@ export function ViewLeaveScreen({
     dateFromFilter && isValidDateString(dateFromFilter) ? dateFromFilter : undefined;
 
   const visibleItems = useMemo(() => {
-    const filtered = apiDateFrom
-      ? items.filter((item) => matchesDateFrom(item, apiDateFrom))
-      : items;
+    let filtered = items.filter((item) => item.active === activeOnly);
+
+    if (apiDateFrom) {
+      filtered = filtered.filter((item) => matchesDateFrom(item, apiDateFrom));
+    }
+
     return sortByDateFromDesc(filtered);
-  }, [apiDateFrom, items]);
+  }, [activeOnly, apiDateFrom, items]);
 
   const fetchPage = useCallback(
     async (page: number, replace: boolean) => {
@@ -161,6 +163,7 @@ export function ViewLeaveScreen({
 
       const result = await getMobileLeaveEntries({
         status: activeOnly,
+        active: activeOnly,
         PageNumber: page,
         PageSize: PAGE_SIZE,
         EESerialID: eeSerialID,
@@ -240,7 +243,9 @@ export function ViewLeaveScreen({
         </Pressable>
         <Text style={styles.headerTitle}>View Leave</Text>
         <Text style={styles.headerSubtitle}>
-          {totalCount > 0 ? `${totalCount} leave record(s)` : 'Your leave history'}
+          {visibleItems.length > 0
+            ? `${visibleItems.length} ${activeOnly ? 'active' : 'inactive'} leave record(s)`
+            : `Your ${activeOnly ? 'active' : 'inactive'} leave history`}
         </Text>
       </LinearGradient>
 
@@ -295,7 +300,7 @@ export function ViewLeaveScreen({
           renderItem={({ item }) => (
             <LeaveRecordCard
               item={item}
-              showEdit={!activeOnly}
+              showEdit={!item.active}
               onEdit={onEditLeave}
             />
           )}
