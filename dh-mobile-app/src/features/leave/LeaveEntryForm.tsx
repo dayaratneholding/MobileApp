@@ -34,6 +34,12 @@ import {
   ReasonType,
 } from '../../types/leave';
 import type { GetLeaveEntryDto } from '../../types/leave';
+import {
+  isValidDateString,
+  toApiDateTime,
+  toDateInputValue,
+  todayDateString,
+} from '../../utils/leaveDates';
 
 type Props = {
   session: AuthSession;
@@ -41,24 +47,6 @@ type Props = {
   onBack: () => void;
   onSuccess?: () => void;
 };
-
-function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function isValidDateString(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
-}
-
-function toIsoDateTime(dateValue: string): string {
-  const date = new Date(`${dateValue}T00:00:00`);
-  return date.toISOString();
-}
-
-function toDateInputValue(value?: string | null): string {
-  if (!value) return todayString();
-  return value.slice(0, 10);
-}
 
 export function LeaveEntryForm({
   session,
@@ -71,8 +59,8 @@ export function LeaveEntryForm({
   const [leaveType, setLeaveType] = useState<LeaveType>(LeaveType.Annual);
   const [reason, setReason] = useState<ReasonType>(ReasonType.AnnualLeave);
   const [halfDayId, setHalfDayId] = useState<HalfDay>(HalfDay.None);
-  const [dateFrom, setDateFrom] = useState(todayString());
-  const [dateTo, setDateTo] = useState(todayString());
+  const [dateFrom, setDateFrom] = useState(todayDateString());
+  const [dateTo, setDateTo] = useState(todayDateString());
   const [cancelNotes, setCancelNotes] = useState('');
   const [leaveCount, setLeaveCount] = useState<number | null>(null);
   const [countLoading, setCountLoading] = useState(false);
@@ -223,8 +211,8 @@ export function LeaveEntryForm({
           entryDate: existingEntry.entryDate,
           leaveType,
           leaveCount,
-          dateFrom: toIsoDateTime(dateFrom),
-          dateTo: toIsoDateTime(dateTo),
+          dateFrom: toApiDateTime(dateFrom),
+          dateTo: toApiDateTime(dateTo),
           reason,
           leaveApprovedBy: existingEntry.leaveApprovedBy,
           cancelNotes: cancelNotes.trim() || null,
@@ -243,8 +231,8 @@ export function LeaveEntryForm({
           entryDate: new Date().toISOString(),
           leaveType,
           leaveCount,
-          dateFrom: toIsoDateTime(dateFrom),
-          dateTo: toIsoDateTime(dateTo),
+          dateFrom: toApiDateTime(dateFrom),
+          dateTo: toApiDateTime(dateTo),
           reason,
           leaveApprovedBy: 0,
           cancelNotes: cancelNotes.trim() || null,

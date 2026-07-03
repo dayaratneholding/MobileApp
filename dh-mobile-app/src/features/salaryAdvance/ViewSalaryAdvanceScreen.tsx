@@ -10,62 +10,51 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { getMobileLeaveEntries } from '../../api/endpoints/leave';
+import { getEmployeeLoanPaged } from '../../api/endpoints/employeeLoan';
 import { getApiErrorMessage } from '../../api/client/client';
-import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
-import type { MobileLeaveEntry } from '../../types/leave';
+import type { EmployeeLoanListItem } from '../../types/employeeLoan';
+import { formatCurrency } from '../../types/employeeLoan';
+import { formatLeaveDate } from '../../utils/leaveDates';
 
 type Props = {
   session: AuthSession;
   refreshKey?: number;
   onBack: () => void;
-  onEditLeave: (leaveId: number) => void;
+  onEditSalaryAdvance: (entry: EmployeeLoanListItem) => void;
 };
 
 const PAGE_SIZE = 10;
 
-import {
-  formatLeaveDate,
-  isValidDateString,
-  toApiDateTime,
-  toDateInputValue,
-  todayDateString,
-} from '../../utils/leaveDates';
+type StatusFilter = 'all' | 'active' | 'inactive';
 
-function matchesDateFrom(item: MobileLeaveEntry, dateFromFilter: string): boolean {
-  if (!dateFromFilter) return true;
-  if (!item.dateFrom) return false;
-  return item.dateFrom.slice(0, 10) === dateFromFilter;
-}
-
-function sortByDateFromDesc(items: MobileLeaveEntry[]): MobileLeaveEntry[] {
+function sortByStartDateDesc(items: EmployeeLoanListItem[]): EmployeeLoanListItem[] {
   return [...items].sort((a, b) => {
-    const aTime = a.dateFrom ? new Date(a.dateFrom).getTime() : 0;
-    const bTime = b.dateFrom ? new Date(b.dateFrom).getTime() : 0;
+    const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+    const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
     return bTime - aTime;
   });
 }
 
-function LeaveRecordCard({
+function SalaryAdvanceRecordCard({
   item,
   showEdit,
   onEdit,
 }: {
-  item: MobileLeaveEntry;
+  item: EmployeeLoanListItem;
   showEdit: boolean;
-  onEdit: (leaveId: number) => void;
+  onEdit: (entry: EmployeeLoanListItem) => void;
 }) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.cardTitleBlock}>
           <Text style={styles.cardName}>
-            {item.leaveTypeName ?? `Leave #${item.empLeaveSerialID}`}
+            Advance #{item.employeeLoanSerialID}
           </Text>
           <Text style={styles.cardMeta}>
-            {item.applicantName ?? '—'} · EPF {item.epfNumber ?? '—'}
+            {item.loanDescription ?? 'Salary Advance'}
           </Text>
         </View>
         <View
@@ -86,25 +75,30 @@ function LeaveRecordCard({
       </View>
 
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>From</Text>
-        <Text style={styles.detailValue}>{formatLeaveDate(item.dateFrom)}</Text>
+        <Text style={styles.detailLabel}>Amount</Text>
+        <Text style={styles.detailValue}>{formatCurrency(item.loanAmount)}</Text>
       </View>
 
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>To</Text>
-        <Text style={styles.detailValue}>{formatLeaveDate(item.dateTo)}</Text>
+        <Text style={styles.detailLabel}>Start Date</Text>
+        <Text style={styles.detailValue}>{formatLeaveDate(item.startDate)}</Text>
       </View>
 
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Days</Text>
+        <Text style={styles.detailLabel}>Installments</Text>
         <Text style={styles.detailValue}>
-          {item.leaveCount != null ? item.leaveCount.toFixed(1) : '—'}
+          {item.installments ?? '—'}
+          {item.installmentAmount != null
+            ? ` × ${formatCurrency(item.installmentAmount)}`
+            : ''}
         </Text>
       </View>
 
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Reason</Text>
-        <Text style={styles.detailValue}>{item.reasonName ?? '—'}</Text>
+        <Text style={styles.detailLabel}>Remaining</Text>
+        <Text style={[styles.detailValue, styles.remainingValue]}>
+          {formatCurrency(item.remainingAmount ?? item.balanceAmount)}
+        </Text>
       </View>
 
       <View style={styles.detailRow}>
@@ -113,47 +107,42 @@ function LeaveRecordCard({
       </View>
 
       {showEdit ? (
-        <Pressable
-          style={styles.editBtn}
-          onPress={() => onEdit(item.id)}
-        >
-          <Text style={styles.editBtnText}>Edit Leave</Text>
+        <Pressable style={styles.editBtn} onPress={() => onEdit(item)}>
+          <Text style={styles.editBtnText}>Edit Salary Advance</Text>
         </Pressable>
       ) : null}
     </View>
   );
 }
 
-export function ViewLeaveScreen({
+export function ViewSalaryAdvanceScreen({
   session,
   refreshKey = 0,
   onBack,
-  onEditLeave,
+  onEditSalaryAdvance,
 }: Props) {
-  const [items, setItems] = useState<MobileLeaveEntry[]>([]);
+  const [items, setItems] = useState<EmployeeLoanListItem[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [activeOnly, setActiveOnly] = useState(true);
-  const [dateFromFilter, setDateFromFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const eeSerialID = session.eESerialID ?? undefined;
-  const apiDateFrom =
-    dateFromFilter && isValidDateString(dateFromFilter) ? dateFromFilter : undefined;
 
   const visibleItems = useMemo(() => {
-    let filtered = items.filter((item) => item.active === activeOnly);
+    let filtered = items;
 
-    if (apiDateFrom) {
-      filtered = filtered.filter((item) => matchesDateFrom(item, apiDateFrom));
+    if (statusFilter === 'active') {
+      filtered = filtered.filter((item) => item.active === true);
+    } else if (statusFilter === 'inactive') {
+      filtered = filtered.filter((item) => item.active === false);
     }
 
-    return sortByDateFromDesc(filtered);
-  }, [activeOnly, apiDateFrom, items]);
+    return sortByStartDateDesc(filtered);
+  }, [items, statusFilter]);
 
   const fetchPage = useCallback(
     async (page: number, replace: boolean) => {
@@ -161,26 +150,26 @@ export function ViewLeaveScreen({
         throw new Error('Employee ID not found in session. Please login again.');
       }
 
-      const result = await getMobileLeaveEntries({
-        status: activeOnly,
-        active: activeOnly,
+      const result = await getEmployeeLoanPaged({
         PageNumber: page,
         PageSize: PAGE_SIZE,
         EESerialID: eeSerialID,
-        DateFrom: apiDateFrom,
-        SortColumn: 'dateFrom',
+        SortColumn: 'startDate',
         SortDirection: 'desc',
+        status:
+          statusFilter === 'all'
+            ? undefined
+            : statusFilter === 'active',
       });
 
       setItems((current) => {
         const merged = replace ? result.items : [...current, ...result.items];
-        return sortByDateFromDesc(merged);
+        return sortByStartDateDesc(merged);
       });
       setPageNumber(result.currentPage);
       setHasNextPage(result.hasNextPage);
-      setTotalCount(result.totalCount);
     },
-    [activeOnly, apiDateFrom, eeSerialID],
+    [eeSerialID, statusFilter],
   );
 
   const loadInitial = useCallback(async () => {
@@ -241,50 +230,59 @@ export function ViewLeaveScreen({
         <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
           <Text style={styles.backText}>← Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>View Leave</Text>
+        <Text style={styles.headerTitle}>View Salary Advance</Text>
         <Text style={styles.headerSubtitle}>
           {visibleItems.length > 0
-            ? `${visibleItems.length} ${activeOnly ? 'active' : 'inactive'} leave record(s)`
-            : `Your ${activeOnly ? 'active' : 'inactive'} leave history`}
+            ? `${visibleItems.length} salary advance record(s)`
+            : 'Your salary advance history'}
         </Text>
       </LinearGradient>
 
       <View style={styles.filters}>
         <View style={styles.toolbar}>
           <Pressable
-            style={[styles.filterChip, activeOnly && styles.filterChipActive]}
-            onPress={() => setActiveOnly(true)}
+            style={[styles.filterChip, statusFilter === 'all' && styles.filterChipActive]}
+            onPress={() => setStatusFilter('all')}
           >
             <Text
               style={[
                 styles.filterChipText,
-                activeOnly && styles.filterChipTextActive,
+                statusFilter === 'all' && styles.filterChipTextActive,
+              ]}
+            >
+              All
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.filterChip, statusFilter === 'active' && styles.filterChipActive]}
+            onPress={() => setStatusFilter('active')}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                statusFilter === 'active' && styles.filterChipTextActive,
               ]}
             >
               Active
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.filterChip, !activeOnly && styles.filterChipActive]}
-            onPress={() => setActiveOnly(false)}
+            style={[
+              styles.filterChip,
+              statusFilter === 'inactive' && styles.filterChipActive,
+            ]}
+            onPress={() => setStatusFilter('inactive')}
           >
             <Text
               style={[
                 styles.filterChipText,
-                !activeOnly && styles.filterChipTextActive,
+                statusFilter === 'inactive' && styles.filterChipTextActive,
               ]}
             >
               Inactive
             </Text>
           </Pressable>
         </View>
-
-        <TextField
-          label="Filter by Date From"
-          placeholder="YYYY-MM-DD"
-          value={dateFromFilter}
-          onChangeText={setDateFromFilter}
-        />
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -296,12 +294,14 @@ export function ViewLeaveScreen({
       ) : (
         <FlatList
           data={visibleItems}
-          keyExtractor={(item) => String(item.id ?? item.empLeaveSerialID)}
+          keyExtractor={(item) =>
+            String(item.id ?? item.employeeLoanSerialID)
+          }
           renderItem={({ item }) => (
-            <LeaveRecordCard
+            <SalaryAdvanceRecordCard
               item={item}
               showEdit={!item.active}
-              onEdit={onEditLeave}
+              onEdit={onEditSalaryAdvance}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -316,7 +316,12 @@ export function ViewLeaveScreen({
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No leave records found.</Text>
+              <Text style={styles.emptyText}>No salary advance records found.</Text>
+              <Text style={styles.emptyHint}>
+                {statusFilter === 'all'
+                  ? 'Request a salary advance from Salary Advance home.'
+                  : `No ${statusFilter} salary advance records for your account.`}
+              </Text>
             </View>
           }
           ListFooterComponent={
@@ -369,22 +374,22 @@ const styles = StyleSheet.create({
   filters: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   toolbar: {
     flexDirection: 'row',
-    marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
   filterChip: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderWidth: 1.5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
     borderColor: colors.border,
-    marginRight: spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   filterChipText: {
@@ -392,12 +397,25 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   filterChipTextActive: {
-    color: colors.primary,
+    color: colors.textOnPrimary,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger,
+    textAlign: 'center',
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xxxl,
   },
   listContent: {
     padding: spacing.xl,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xxxl,
+    flexGrow: 1,
   },
   card: {
     backgroundColor: colors.surface,
@@ -414,7 +432,7 @@ const styles = StyleSheet.create({
   },
   cardTitleBlock: {
     flex: 1,
-    marginRight: spacing.sm,
+    marginRight: spacing.md,
   },
   cardName: {
     ...typography.title,
@@ -423,18 +441,18 @@ const styles = StyleSheet.create({
   cardMeta: {
     ...typography.caption,
     color: colors.textMuted,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   statusBadge: {
-    borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
   },
   statusActive: {
     backgroundColor: '#DCFCE7',
   },
   statusInactive: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#F3F4F6',
   },
   statusText: {
     ...typography.caption,
@@ -444,11 +462,12 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   statusTextInactive: {
-    color: colors.danger,
+    color: colors.textMuted,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: spacing.xs,
   },
   detailLabel: {
@@ -456,42 +475,36 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   detailValue: {
-    ...typography.caption,
+    ...typography.title,
     color: colors.text,
-    fontWeight: '600',
-    maxWidth: '60%',
-    textAlign: 'right',
   },
-  centered: {
-    flex: 1,
+  remainingValue: {
+    color: colors.primary,
+  },
+  editBtn: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
+    borderRadius: radius.md,
+    backgroundColor: '#FEE2E2',
+  },
+  editBtnText: {
+    ...typography.label,
+    color: colors.danger,
   },
   emptyText: {
-    ...typography.body,
-    color: colors.textMuted,
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
   },
-  errorText: {
+  emptyHint: {
     ...typography.caption,
-    color: colors.danger,
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
     lineHeight: 20,
   },
   footerLoader: {
     marginVertical: spacing.lg,
-  },
-  editBtn: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  editBtnText: {
-    ...typography.label,
-    color: colors.textOnPrimary,
   },
 });

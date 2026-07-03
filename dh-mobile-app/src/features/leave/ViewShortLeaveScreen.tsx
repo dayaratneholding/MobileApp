@@ -10,60 +10,55 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { getMobileLeaveEntries } from '../../api/endpoints/leave';
+import { getMobileShortLeaveEntries } from '../../api/endpoints/shortLeave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
-import type { MobileLeaveEntry } from '../../types/leave';
+import type { MobileShortLeaveEntry } from '../../types/shortLeave';
+import { getSlotLabel } from '../../types/shortLeave';
+import {
+  formatLeaveDate,
+  isValidDateString,
+} from '../../utils/leaveDates';
 
 type Props = {
   session: AuthSession;
   refreshKey?: number;
   onBack: () => void;
-  onEditLeave: (leaveId: number) => void;
+  onEditShortLeave: (entry: MobileShortLeaveEntry) => void;
 };
 
 const PAGE_SIZE = 10;
 
-import {
-  formatLeaveDate,
-  isValidDateString,
-  toApiDateTime,
-  toDateInputValue,
-  todayDateString,
-} from '../../utils/leaveDates';
-
-function matchesDateFrom(item: MobileLeaveEntry, dateFromFilter: string): boolean {
-  if (!dateFromFilter) return true;
-  if (!item.dateFrom) return false;
-  return item.dateFrom.slice(0, 10) === dateFromFilter;
+function matchesDateFilter(item: MobileShortLeaveEntry, dateFilter: string): boolean {
+  if (!dateFilter) return true;
+  if (!item.date) return false;
+  return item.date.slice(0, 10) === dateFilter;
 }
 
-function sortByDateFromDesc(items: MobileLeaveEntry[]): MobileLeaveEntry[] {
+function sortByDateDesc(items: MobileShortLeaveEntry[]): MobileShortLeaveEntry[] {
   return [...items].sort((a, b) => {
-    const aTime = a.dateFrom ? new Date(a.dateFrom).getTime() : 0;
-    const bTime = b.dateFrom ? new Date(b.dateFrom).getTime() : 0;
+    const aTime = a.date ? new Date(a.date).getTime() : 0;
+    const bTime = b.date ? new Date(b.date).getTime() : 0;
     return bTime - aTime;
   });
 }
 
-function LeaveRecordCard({
+function ShortLeaveRecordCard({
   item,
   showEdit,
   onEdit,
 }: {
-  item: MobileLeaveEntry;
+  item: MobileShortLeaveEntry;
   showEdit: boolean;
-  onEdit: (leaveId: number) => void;
+  onEdit: (entry: MobileShortLeaveEntry) => void;
 }) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.cardTitleBlock}>
-          <Text style={styles.cardName}>
-            {item.leaveTypeName ?? `Leave #${item.empLeaveSerialID}`}
-          </Text>
+          <Text style={styles.cardName}>Short Leave #{item.shortLeaveSerialID}</Text>
           <Text style={styles.cardMeta}>
             {item.applicantName ?? '—'} · EPF {item.epfNumber ?? '—'}
           </Text>
@@ -86,25 +81,20 @@ function LeaveRecordCard({
       </View>
 
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>From</Text>
-        <Text style={styles.detailValue}>{formatLeaveDate(item.dateFrom)}</Text>
+        <Text style={styles.detailLabel}>Date</Text>
+        <Text style={styles.detailValue}>{formatLeaveDate(item.date)}</Text>
       </View>
 
       <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>To</Text>
-        <Text style={styles.detailValue}>{formatLeaveDate(item.dateTo)}</Text>
-      </View>
-
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Days</Text>
+        <Text style={styles.detailLabel}>Slot</Text>
         <Text style={styles.detailValue}>
-          {item.leaveCount != null ? item.leaveCount.toFixed(1) : '—'}
+          {getSlotLabel(item.slot, item.slotName)}
         </Text>
       </View>
 
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Reason</Text>
-        <Text style={styles.detailValue}>{item.reasonName ?? '—'}</Text>
+        <Text style={styles.detailValue}>{item.reason ?? '—'}</Text>
       </View>
 
       <View style={styles.detailRow}>
@@ -115,44 +105,43 @@ function LeaveRecordCard({
       {showEdit ? (
         <Pressable
           style={styles.editBtn}
-          onPress={() => onEdit(item.id)}
+          onPress={() => onEdit(item)}
         >
-          <Text style={styles.editBtnText}>Edit Leave</Text>
+          <Text style={styles.editBtnText}>Edit Short Leave</Text>
         </Pressable>
       ) : null}
     </View>
   );
 }
 
-export function ViewLeaveScreen({
+export function ViewShortLeaveScreen({
   session,
   refreshKey = 0,
   onBack,
-  onEditLeave,
+  onEditShortLeave,
 }: Props) {
-  const [items, setItems] = useState<MobileLeaveEntry[]>([]);
+  const [items, setItems] = useState<MobileShortLeaveEntry[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [activeOnly, setActiveOnly] = useState(true);
-  const [dateFromFilter, setDateFromFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
   const eeSerialID = session.eESerialID ?? undefined;
   const apiDateFrom =
-    dateFromFilter && isValidDateString(dateFromFilter) ? dateFromFilter : undefined;
+    dateFilter && isValidDateString(dateFilter) ? dateFilter : undefined;
 
   const visibleItems = useMemo(() => {
     let filtered = items.filter((item) => item.active === activeOnly);
 
     if (apiDateFrom) {
-      filtered = filtered.filter((item) => matchesDateFrom(item, apiDateFrom));
+      filtered = filtered.filter((item) => matchesDateFilter(item, apiDateFrom));
     }
 
-    return sortByDateFromDesc(filtered);
+    return sortByDateDesc(filtered);
   }, [activeOnly, apiDateFrom, items]);
 
   const fetchPage = useCallback(
@@ -161,26 +150,24 @@ export function ViewLeaveScreen({
         throw new Error('Employee ID not found in session. Please login again.');
       }
 
-      const result = await getMobileLeaveEntries({
-        status: activeOnly,
-        active: activeOnly,
-        PageNumber: page,
-        PageSize: PAGE_SIZE,
-        EESerialID: eeSerialID,
-        DateFrom: apiDateFrom,
-        SortColumn: 'dateFrom',
-        SortDirection: 'desc',
-      });
+      const result = await getMobileShortLeaveEntries(
+        {
+          PageNumber: page,
+          PageSize: PAGE_SIZE,
+          EESerialID: eeSerialID,
+          DateFrom: apiDateFrom,
+        },
+        session.comSerialID,
+      );
 
       setItems((current) => {
         const merged = replace ? result.items : [...current, ...result.items];
-        return sortByDateFromDesc(merged);
+        return sortByDateDesc(merged);
       });
       setPageNumber(result.currentPage);
       setHasNextPage(result.hasNextPage);
-      setTotalCount(result.totalCount);
     },
-    [activeOnly, apiDateFrom, eeSerialID],
+    [apiDateFrom, eeSerialID, session.comSerialID],
   );
 
   const loadInitial = useCallback(async () => {
@@ -241,11 +228,11 @@ export function ViewLeaveScreen({
         <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
           <Text style={styles.backText}>← Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>View Leave</Text>
+        <Text style={styles.headerTitle}>View Short Leave</Text>
         <Text style={styles.headerSubtitle}>
           {visibleItems.length > 0
-            ? `${visibleItems.length} ${activeOnly ? 'active' : 'inactive'} leave record(s)`
-            : `Your ${activeOnly ? 'active' : 'inactive'} leave history`}
+            ? `${visibleItems.length} ${activeOnly ? 'active' : 'inactive'} short leave record(s)`
+            : `Your ${activeOnly ? 'active' : 'inactive'} short leave history`}
         </Text>
       </LinearGradient>
 
@@ -280,10 +267,10 @@ export function ViewLeaveScreen({
         </View>
 
         <TextField
-          label="Filter by Date From"
+          label="Filter by Date"
           placeholder="YYYY-MM-DD"
-          value={dateFromFilter}
-          onChangeText={setDateFromFilter}
+          value={dateFilter}
+          onChangeText={setDateFilter}
         />
       </View>
 
@@ -296,12 +283,14 @@ export function ViewLeaveScreen({
       ) : (
         <FlatList
           data={visibleItems}
-          keyExtractor={(item) => String(item.id ?? item.empLeaveSerialID)}
+          keyExtractor={(item) =>
+            String(item.id ?? item.shortLeaveSerialID)
+          }
           renderItem={({ item }) => (
-            <LeaveRecordCard
+            <ShortLeaveRecordCard
               item={item}
               showEdit={!item.active}
-              onEdit={onEditLeave}
+              onEdit={onEditShortLeave}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -316,7 +305,12 @@ export function ViewLeaveScreen({
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No leave records found.</Text>
+              <Text style={styles.emptyText}>No short leave records found.</Text>
+              <Text style={styles.emptyHint}>
+                {activeOnly
+                  ? 'Try the Inactive tab, or add a short leave from Leave Management.'
+                  : 'No inactive short leave records for your account.'}
+              </Text>
             </View>
           }
           ListFooterComponent={
@@ -472,6 +466,13 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textMuted,
     textAlign: 'center',
+  },
+  emptyHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    lineHeight: 18,
   },
   errorText: {
     ...typography.caption,

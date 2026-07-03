@@ -5,3 +5,4 @@ export const HCM_API_PREFIX = '/api/v1/hcm';
 
 export const API_URL = `${API_BASE_URL}${API_PREFIX}`;
 export const HCM_API_URL = `${API_HCM_URL}${HCM_API_PREFIX}`;
+export const MOBILE_APP_API_URL = `${API_HCM_URL}/api/MobileApp`;
