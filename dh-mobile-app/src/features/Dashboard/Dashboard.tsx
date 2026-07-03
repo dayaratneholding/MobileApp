@@ -11,12 +11,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { getAttendanceSummary } from '../../api/endpoints/attendance';
+import { getEmployeeLoanPaged } from '../../api/endpoints/employeeLoan';
 import { fetchLeaveBalances } from '../../api/endpoints/leave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
 import type { AttendanceSummary } from '../../types/attendance';
 import { LeaveHomeScreen } from '../leave/LeaveHomeScreen';
+import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 
 type Props = {
   session: AuthSession;
@@ -46,9 +48,10 @@ function formatCount(value: number | null): string {
 }
 
 export function Dashboard({ session, onLogout }: Props) {
-  const [activeScreen, setActiveScreen] = useState<'main' | 'leave'>('main');
+  const [activeScreen, setActiveScreen] = useState<'main' | 'leave' | 'salary-advance'>('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
+  const [salaryAdvanceCount, setSalaryAdvanceCount] = useState<number | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState('');
 
@@ -72,9 +75,15 @@ export function Dashboard({ session, onLogout }: Props) {
     setSummaryError('');
 
     try {
-      const [attendanceResult, leaveResult] = await Promise.allSettled([
+      const [attendanceResult, leaveResult, salaryAdvanceResult] =
+        await Promise.allSettled([
         getAttendanceSummary(eeSerialID),
         fetchLeaveBalances(eeSerialID, session.comSerialID),
+        getEmployeeLoanPaged({
+          PageNumber: 1,
+          PageSize: 20,
+          EESerialID: eeSerialID,
+        }),
       ]);
 
       if (attendanceResult.status === 'fulfilled') {
@@ -94,6 +103,15 @@ export function Dashboard({ session, onLogout }: Props) {
         setLeaveRemaining(hasLeave ? annual + casual : null);
       } else {
         setLeaveRemaining(null);
+      }
+
+      if (salaryAdvanceResult.status === 'fulfilled') {
+        const activeAdvances = salaryAdvanceResult.value.items.filter(
+          (item) => item.active,
+        );
+        setSalaryAdvanceCount(activeAdvances.length);
+      } else {
+        setSalaryAdvanceCount(null);
       }
 
       if (attendanceResult.status === 'rejected') {
@@ -149,19 +167,31 @@ export function Dashboard({ session, onLogout }: Props) {
       {
         key: 'salary-advance',
         title: 'Salary Advance',
-        subtitle: 'Available',
-        value: 'Request',
+        subtitle: 'Active requests',
+        value:
+          salaryAdvanceCount !== null
+            ? `${formatCount(salaryAdvanceCount)} active`
+            : 'Open',
         emoji: '💳',
         tint: '#FEE2E2',
         accent: colors.danger,
       },
     ],
-    [attendance?.attendanceCount, leaveRemaining, monthLabel],
+    [attendance?.attendanceCount, leaveRemaining, monthLabel, salaryAdvanceCount],
   );
 
   if (activeScreen === 'leave') {
     return (
       <LeaveHomeScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
+  }
+
+  if (activeScreen === 'salary-advance') {
+    return (
+      <SalaryAdvanceHomeScreen
         session={session}
         onBack={() => setActiveScreen('main')}
       />
@@ -251,7 +281,9 @@ export function Dashboard({ session, onLogout }: Props) {
                 onPress={
                   w.key === 'leave'
                     ? () => setActiveScreen('leave')
-                    : undefined
+                    : w.key === 'salary-advance'
+                      ? () => setActiveScreen('salary-advance')
+                      : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
@@ -278,7 +310,12 @@ export function Dashboard({ session, onLogout }: Props) {
             <Divider />
             <Row emoji="📄" label="View Payslip" />
             <Divider />
-            <Row emoji="💳" label="Request Salary Advance" last />
+            <Row
+              emoji="💳"
+              label="Request Salary Advance"
+              onPress={() => setActiveScreen('salary-advance')}
+              last
+            />
           </View>
         </View>
       </ScrollView>

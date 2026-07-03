@@ -20,6 +20,21 @@ export function toApiDateTime(dateValue: string): string {
   return `${match[1]}T00:00:00`;
 }
 
+export function toApiDateOnly(dateValue: string): string {
+  const match = dateValue.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : dateValue;
+}
+
+export function toApiDateOnlyObject(dateValue: string): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  const dateOnly = toApiDateOnly(dateValue);
+  const [year, month, day] = dateOnly.split('-').map(Number);
+  return { year, month, day };
+}
+
 export function formatLeaveDate(value?: string | null): string {
   if (!value) return '—';
   const datePart = toDateInputValue(value);
