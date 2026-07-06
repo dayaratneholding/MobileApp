@@ -19,6 +19,7 @@ import type { AuthSession } from '../../types/api';
 import type { AttendanceSummary } from '../../types/attendance';
 import { LeaveHomeScreen } from '../leave/LeaveHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
+import { PayslipScreen } from '../payslip/PayslipScreen';
 
 type Props = {
   session: AuthSession;
@@ -48,7 +49,9 @@ function formatCount(value: number | null): string {
 }
 
 export function Dashboard({ session, onLogout }: Props) {
-  const [activeScreen, setActiveScreen] = useState<'main' | 'leave' | 'salary-advance'>('main');
+  const [activeScreen, setActiveScreen] = useState<
+    'main' | 'leave' | 'salary-advance' | 'payslip'
+  >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
   const [salaryAdvanceCount, setSalaryAdvanceCount] = useState<number | null>(null);
@@ -198,6 +201,15 @@ export function Dashboard({ session, onLogout }: Props) {
     );
   }
 
+  if (activeScreen === 'payslip') {
+    return (
+      <PayslipScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -283,7 +295,9 @@ export function Dashboard({ session, onLogout }: Props) {
                     ? () => setActiveScreen('leave')
                     : w.key === 'salary-advance'
                       ? () => setActiveScreen('salary-advance')
-                      : undefined
+                      : w.key === 'salary'
+                        ? () => setActiveScreen('payslip')
+                        : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
@@ -308,7 +322,11 @@ export function Dashboard({ session, onLogout }: Props) {
               onPress={() => setActiveScreen('leave')}
             />
             <Divider />
-            <Row emoji="📄" label="View Payslip" />
+            <Row
+              emoji="📄"
+              label="View Payslip"
+              onPress={() => setActiveScreen('payslip')}
+            />
             <Divider />
             <Row
               emoji="💳"
