@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +27,7 @@ import type {
   PayslipData,
 } from '../../types/payslip';
 import { formatMoney } from '../../types/payslip';
+import { downloadPayslipPdf } from '../../utils/payslipPdf';
 
 type Props = {
   session: AuthSession;
@@ -106,7 +108,15 @@ function PayPeriodPicker({
   );
 }
 
-function PayslipCard({ payslip }: { payslip: PayslipData }) {
+function PayslipCard({
+  payslip,
+  onDownload,
+  downloading,
+}: {
+  payslip: PayslipData;
+  onDownload: () => void;
+  downloading: boolean;
+}) {
   return (
     <View style={styles.payslipCard}>
       <View style={styles.payslipHeader}>
@@ -177,6 +187,12 @@ function PayslipCard({ payslip }: { payslip: PayslipData }) {
       <PayslipLine label="EPF 12%" value={payslip.epF12} />
       <PayslipLine label="ETF 3%" value={payslip.etF3} />
       <PayslipLine label="Total for EPF" value={payslip.totalForEPF} />
+
+      <Button
+        label={downloading ? 'Preparing PDF…' : 'Download Payslip (PDF)'}
+        onPress={onDownload}
+        loading={downloading}
+      />
     </View>
   );
 }
@@ -189,6 +205,7 @@ export function PayslipScreen({ session, onBack }: Props) {
   const [eeidInput, setEeidInput] = useState('');
   const [setupLoading, setSetupLoading] = useState(true);
   const [payslipLoading, setPayslipLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
   const [error, setError] = useState('');
 
   const loadPayrollPeriods = useCallback(
@@ -308,6 +325,25 @@ export function PayslipScreen({ session, onBack }: Props) {
     }
   };
 
+  const handleDownloadPayslip = async () => {
+    if (!payslip) {
+      return;
+    }
+
+    setDownloadLoading(true);
+    setError('');
+
+    try {
+      await downloadPayslipPdf(payslip);
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      setError(message);
+      Alert.alert('Download failed', message);
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -391,7 +427,13 @@ export function PayslipScreen({ session, onBack }: Props) {
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          {payslip ? <PayslipCard payslip={payslip} /> : null}
+          {payslip ? (
+            <PayslipCard
+              payslip={payslip}
+              onDownload={handleDownloadPayslip}
+              downloading={downloadLoading}
+            />
+          ) : null}
         </View>
       </ScrollView>
     </View>
