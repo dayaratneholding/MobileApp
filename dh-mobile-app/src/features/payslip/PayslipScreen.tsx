@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -18,6 +17,7 @@ import { getEmployeePayrollPeriods, getPayrollPeriods } from '../../api/endpoint
 import { getPayslip } from '../../api/endpoints/payslip';
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
+import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
@@ -348,7 +348,7 @@ export function PayslipScreen({ session, onBack }: Props) {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <KeyboardForm>
         <LinearGradient
           colors={[colors.gradientStart, colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
@@ -435,7 +435,7 @@ export function PayslipScreen({ session, onBack }: Props) {
             />
           ) : null}
         </View>
-      </ScrollView>
+      </KeyboardForm>
     </View>
   );
 }

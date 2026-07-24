@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -249,6 +251,11 @@ export function ViewLeaveScreen({
         </Text>
       </LinearGradient>
 
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
       <View style={styles.filters}>
         <View style={styles.toolbar}>
           <Pressable
@@ -305,6 +312,9 @@ export function ViewLeaveScreen({
             />
           )}
           contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -329,6 +339,7 @@ export function ViewLeaveScreen({
           }
         />
       )}
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -337,6 +348,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
   },
   header: {
     paddingTop: spacing.xxxl + spacing.md,

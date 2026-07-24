@@ -2,10 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,6 +18,7 @@ import {
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
 import { OptionPicker } from '../../components/forms/OptionPicker';
+import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
@@ -268,14 +266,7 @@ export function LeaveEntryForm({
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardForm>
           <LinearGradient
             colors={[colors.gradientStart, colors.gradientEnd]}
             start={{ x: 0, y: 0 }}
@@ -367,8 +358,7 @@ export function LeaveEntryForm({
               />
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardForm>
     </View>
   );
 }

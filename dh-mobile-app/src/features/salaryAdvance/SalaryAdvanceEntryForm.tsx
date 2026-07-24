@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -17,6 +14,7 @@ import {
 } from '../../api/endpoints/employeeLoan';
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
+import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession } from '../../types/api';
@@ -190,14 +188,7 @@ export function SalaryAdvanceEntryForm({
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardForm>
           <LinearGradient
             colors={[colors.gradientStart, colors.gradientEnd]}
             start={{ x: 0, y: 0 }}
@@ -274,8 +265,7 @@ export function SalaryAdvanceEntryForm({
               />
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardForm>
     </View>
   );
 }
