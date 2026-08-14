@@ -17,6 +17,10 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+keystore-info.txt
+credentials/android/
+credentials.json
+PLAY-UPLOAD-AFTER-48H/
 
 # Metro
 .metro-health-check*

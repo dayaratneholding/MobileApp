@@ -20,6 +20,7 @@ import type { AttendanceSummary } from '../../types/attendance';
 import { LeaveHomeScreen } from '../leave/LeaveHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 import { PayslipScreen } from '../payslip/PayslipScreen';
+import { ViewAttendanceScreen } from '../attendance/ViewAttendanceScreen';
 
 type Props = {
   session: AuthSession;
@@ -50,7 +51,7 @@ function formatCount(value: number | null): string {
 
 export function Dashboard({ session, onLogout }: Props) {
   const [activeScreen, setActiveScreen] = useState<
-    'main' | 'leave' | 'salary-advance' | 'payslip'
+    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance'
   >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
@@ -210,6 +211,15 @@ export function Dashboard({ session, onLogout }: Props) {
     );
   }
 
+  if (activeScreen === 'attendance') {
+    return (
+      <ViewAttendanceScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -297,7 +307,9 @@ export function Dashboard({ session, onLogout }: Props) {
                       ? () => setActiveScreen('salary-advance')
                       : w.key === 'salary'
                         ? () => setActiveScreen('payslip')
-                        : undefined
+                        : w.key === 'attendance'
+                          ? () => setActiveScreen('attendance')
+                          : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
@@ -314,7 +326,11 @@ export function Dashboard({ session, onLogout }: Props) {
 
           <Text style={styles.sectionTitle}>Quick links</Text>
           <View style={styles.linksCard}>
-            <Row emoji="✅" label="Mark Attendance" />
+            <Row
+              emoji="✅"
+              label="View Attendance"
+              onPress={() => setActiveScreen('attendance')}
+            />
             <Divider />
             <Row
               emoji="📝"
