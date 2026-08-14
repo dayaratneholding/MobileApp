@@ -10,7 +10,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { getEmployeeLoanPaged } from '../../api/endpoints/employeeLoan';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { EmployeeLoanListItem } from '../../types/employeeLoan';
 import { formatCurrency } from '../../types/employeeLoan';
@@ -33,13 +35,14 @@ type Widget = {
   accent: string;
 };
 
-const widgets: Widget[] = [
+function getWidgets(colors: ColorPalette): Widget[] {
+  return [
   {
     key: 'add',
     title: 'Request Advance',
     subtitle: 'Submit a new request',
     emoji: '➕',
-    tint: '#FEE2E2',
+    tint: colors.tintDanger,
     accent: colors.danger,
   },
   {
@@ -47,10 +50,11 @@ const widgets: Widget[] = [
     title: 'View Advances',
     subtitle: 'See your history',
     emoji: '📋',
-    tint: '#FEF3C7',
+    tint: colors.tintWarning,
     accent: colors.warning,
   },
 ];
+}
 
 function sumRemainingAmount(items: EmployeeLoanListItem[]): number | null {
   const activeItems = items.filter((item) => item.active);
@@ -65,6 +69,9 @@ function sumRemainingAmount(items: EmployeeLoanListItem[]): number | null {
 }
 
 export function SalaryAdvanceHomeScreen({ session, onBack }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const widgets = getWidgets(colors);
   const [screen, setScreen] = useState<Screen>('home');
   const [editEntry, setEditEntry] = useState<EmployeeLoanListItem | null>(null);
   const [viewRefreshKey, setViewRefreshKey] = useState(0);
@@ -252,7 +259,8 @@ export function SalaryAdvanceHomeScreen({ session, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -350,7 +358,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   summaryBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.tintDanger,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
@@ -417,4 +425,5 @@ const styles = StyleSheet.create({
     ...typography.label,
     marginTop: spacing.sm,
   },
-});
+  });
+}

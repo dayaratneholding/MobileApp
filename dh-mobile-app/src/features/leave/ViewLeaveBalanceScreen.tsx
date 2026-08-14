@@ -10,7 +10,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { fetchYearLeaveAllocationBalances } from '../../api/endpoints/leave';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { LeaveYearBalanceItem, YearLeaveAllocationSummary } from '../../types/leave';
 
@@ -38,7 +40,7 @@ function formatCount(value: number | null): string {
   return value.toFixed(1);
 }
 
-function buildRows(summary: YearLeaveAllocationSummary): BalanceRow[] {
+function buildRows(summary: YearLeaveAllocationSummary, colors: ColorPalette): BalanceRow[] {
   return [
     {
       key: 'annual',
@@ -118,6 +120,8 @@ function sumYearTotals(summary: YearLeaveAllocationSummary): {
 }
 
 export function ViewLeaveBalanceScreen({ session, onBack }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [summary, setSummary] = useState<YearLeaveAllocationSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -133,8 +137,9 @@ export function ViewLeaveBalanceScreen({ session, onBack }: Props) {
           noPayAuthorized: null,
           noPayUnauthorized: null,
         },
+        colors,
       ),
-    [summary],
+    [colors, summary],
   );
 
   const loadBalances = useCallback(async () => {
@@ -299,7 +304,8 @@ export function ViewLeaveBalanceScreen({ session, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -457,4 +463,5 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: radius.pill,
   },
-});
+  });
+}

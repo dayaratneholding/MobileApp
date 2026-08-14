@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography } from '../../styles/theme';
+import { Pressable, Text, View } from 'react-native';
+import { radius, spacing, typography, type ColorPalette } from '../../styles/theme';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 
 type Option<T extends number> = {
   value: T;
@@ -22,6 +23,8 @@ export function OptionPicker<T extends number>({
   onChange,
   error,
 }: Props<T>) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
@@ -47,44 +50,46 @@ export function OptionPicker<T extends number>({
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    marginBottom: spacing.lg,
-  },
-  label: {
-    ...typography.label,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  list: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  item: {
-    backgroundColor: colors.inputBg,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  itemSelected: {
-    backgroundColor: '#EEF2FF',
-    borderColor: colors.primary,
-  },
-  itemText: {
-    ...typography.caption,
-    color: colors.text,
-  },
-  itemTextSelected: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  error: {
-    ...typography.caption,
-    color: colors.danger,
-    marginTop: spacing.xs,
-  },
-});
+function createStyles(colors: ColorPalette) {
+  return {
+    wrapper: {
+      marginBottom: spacing.lg,
+    },
+    label: {
+      ...typography.label,
+      color: colors.textSecondary,
+      marginBottom: spacing.sm,
+    },
+    list: {
+      flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
+    },
+    item: {
+      backgroundColor: colors.inputBg,
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+      marginRight: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    itemSelected: {
+      backgroundColor: colors.tintSelected,
+      borderColor: colors.primary,
+    },
+    itemText: {
+      ...typography.caption,
+      color: colors.text,
+    },
+    itemTextSelected: {
+      color: colors.primary,
+      fontWeight: '600' as const,
+    },
+    error: {
+      ...typography.caption,
+      color: colors.danger,
+      marginTop: spacing.xs,
+    },
+  };
+}

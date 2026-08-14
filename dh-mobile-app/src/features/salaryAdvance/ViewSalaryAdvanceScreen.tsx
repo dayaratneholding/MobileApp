@@ -12,7 +12,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { getEmployeeLoanPaged } from '../../api/endpoints/employeeLoan';
 import { getApiErrorMessage } from '../../api/client/client';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { EmployeeLoanListItem } from '../../types/employeeLoan';
 import { formatCurrency } from '../../types/employeeLoan';
@@ -46,6 +48,7 @@ function SalaryAdvanceRecordCard({
   showEdit: boolean;
   onEdit: (entry: EmployeeLoanListItem) => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -121,6 +124,8 @@ export function ViewSalaryAdvanceScreen({
   onBack,
   onEditSalaryAdvance,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [items, setItems] = useState<EmployeeLoanListItem[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -338,7 +343,8 @@ export function ViewSalaryAdvanceScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -449,10 +455,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   statusActive: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.tintSuccess,
   },
   statusInactive: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.tintNeutral,
   },
   statusText: {
     ...typography.caption,
@@ -486,7 +492,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     alignItems: 'center',
     borderRadius: radius.md,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.tintDanger,
   },
   editBtnText: {
     ...typography.label,
@@ -507,4 +513,5 @@ const styles = StyleSheet.create({
   footerLoader: {
     marginVertical: spacing.lg,
   },
-});
+  });
+}

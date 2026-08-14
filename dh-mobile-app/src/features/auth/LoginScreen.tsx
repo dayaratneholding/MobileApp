@@ -15,7 +15,10 @@ import { Button } from '../../components/ui/Button';
 import { CompanyPicker } from '../../components/forms/CompanyPicker';
 import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { ThemeToggle } from '../../components/ui/ThemeToggle';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession, UserCompany } from '../../types/api';
 
 type Props = {
@@ -23,6 +26,8 @@ type Props = {
 };
 
 export function LoginScreen({ onLogin }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [companies, setCompanies] = useState<UserCompany[]>([]);
@@ -121,6 +126,9 @@ export function LoginScreen({ onLogin }: Props) {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
+        <View style={styles.headerTop}>
+          <ThemeToggle />
+        </View>
         <View style={styles.logoCircle}>
           <Image
             source={require('../../../assets/psk-logo.png')}
@@ -214,7 +222,8 @@ export function LoginScreen({ onLogin }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -229,6 +238,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radius.xl,
     borderBottomRightRadius: radius.xl,
     alignItems: 'center',
+  },
+  headerTop: {
+    position: 'absolute',
+    top: spacing.xxxl,
+    right: spacing.xl,
+    zIndex: 2,
   },
   logoCircle: {
     width: 84,
@@ -304,4 +319,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-});
+  });
+}

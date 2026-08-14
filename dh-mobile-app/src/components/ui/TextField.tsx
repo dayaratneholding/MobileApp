@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   TextInputProps,
   View,
 } from 'react-native';
-import { colors, radius, spacing, typography } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 
 type Props = TextInputProps & {
   label?: string;
@@ -27,6 +28,8 @@ export function TextField({
   multiline,
   ...rest
 }: Props) {
+  const { colors, colorScheme } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(isPassword);
 
@@ -45,6 +48,7 @@ export function TextField({
         <TextInput
           style={[styles.input, multiline && styles.inputMultiline, style]}
           placeholderTextColor={colors.textMuted}
+          keyboardAppearance={colorScheme === 'dark' ? 'dark' : 'light'}
           secureTextEntry={hidden}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
@@ -69,60 +73,62 @@ export function TextField({
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    width: '100%',
-    marginBottom: spacing.lg,
-  },
-  label: {
-    ...typography.label,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBg,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    paddingHorizontal: spacing.lg,
-    height: 54,
-  },
-  fieldMultiline: {
-    height: undefined,
-    minHeight: 96,
-    alignItems: 'flex-start',
-    paddingVertical: spacing.md,
-  },
-  fieldFocused: {
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
-  },
-  fieldError: {
-    borderColor: colors.danger,
-  },
-  icon: {
-    marginRight: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    ...typography.body,
-    color: colors.text,
-    height: '100%',
-    paddingVertical: 0,
-  },
-  inputMultiline: {
-    height: undefined,
-    minHeight: 72,
-  },
-  toggle: {
-    ...typography.label,
-    color: colors.primary,
-  },
-  errorText: {
-    ...typography.caption,
-    color: colors.danger,
-    marginTop: spacing.xs,
-  },
-});
+function createStyles(colors: ColorPalette) {
+  return {
+    wrapper: {
+      width: '100%' as const,
+      marginBottom: spacing.lg,
+    },
+    label: {
+      ...typography.label,
+      color: colors.textSecondary,
+      marginBottom: spacing.sm,
+    },
+    field: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      backgroundColor: colors.inputBg,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+      paddingHorizontal: spacing.lg,
+      height: 54,
+    },
+    fieldMultiline: {
+      height: undefined,
+      minHeight: 96,
+      alignItems: 'flex-start' as const,
+      paddingVertical: spacing.md,
+    },
+    fieldFocused: {
+      borderColor: colors.primary,
+      backgroundColor: colors.surface,
+    },
+    fieldError: {
+      borderColor: colors.danger,
+    },
+    icon: {
+      marginRight: spacing.sm,
+    },
+    input: {
+      flex: 1,
+      ...typography.body,
+      color: colors.text,
+      height: '100%' as const,
+      paddingVertical: 0,
+    },
+    inputMultiline: {
+      height: undefined,
+      minHeight: 72,
+    },
+    toggle: {
+      ...typography.label,
+      color: colors.primary,
+    },
+    errorText: {
+      ...typography.caption,
+      color: colors.danger,
+      marginTop: spacing.xs,
+    },
+  };
+}

@@ -19,7 +19,9 @@ import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
 import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type {
   EmployeeDetails,
@@ -45,6 +47,7 @@ function PayslipLine({
   highlight?: boolean;
   bold?: boolean;
 }) {
+  const styles = useThemedStyles(createStyles);
   if (value == null || value === 0) {
     return null;
   }
@@ -74,6 +77,7 @@ function PayPeriodPicker({
   selected?: string;
   onSelect: (payPeriod: string) => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   if (periods.length === 0) {
     return (
       <Text style={styles.emptyPeriodText}>
@@ -117,6 +121,7 @@ function PayslipCard({
   onDownload: () => void;
   downloading: boolean;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.payslipCard}>
       <View style={styles.payslipHeader}>
@@ -198,6 +203,8 @@ function PayslipCard({
 }
 
 export function PayslipScreen({ session, onBack }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [employee, setEmployee] = useState<EmployeeDetails | null>(null);
   const [periods, setPeriods] = useState<PayrollPeriodItem[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
@@ -441,6 +448,7 @@ export function PayslipScreen({ session, onBack }: Props) {
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.detailItem}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -449,7 +457,8 @@ function DetailItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -544,7 +553,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   periodChipSelected: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.tintSelected,
     borderColor: colors.primary,
   },
   periodChipText: {
@@ -671,7 +680,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   netCard: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.tintWarning,
     borderRadius: radius.lg,
     padding: spacing.lg,
     marginTop: spacing.lg,
@@ -691,4 +700,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.xs,
   },
-});
+  });
+}

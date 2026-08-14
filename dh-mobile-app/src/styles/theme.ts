@@ -1,4 +1,41 @@
-export const colors = {
+export type ColorPalette = {
+  primary: string;
+  primaryDark: string;
+  primaryLight: string;
+  accent: string;
+  gradientStart: string;
+  gradientEnd: string;
+
+  background: string;
+  surface: string;
+  card: string;
+
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  textOnPrimary: string;
+
+  border: string;
+  inputBg: string;
+
+  success: string;
+  warning: string;
+  danger: string;
+  info: string;
+
+  shadow: string;
+
+  tintPrimary: string;
+  tintSuccess: string;
+  tintDanger: string;
+  tintWarning: string;
+  tintPurple: string;
+  tintRose: string;
+  tintSelected: string;
+  tintNeutral: string;
+};
+
+export const lightColors: ColorPalette = {
   primary: '#4F46E5',
   primaryDark: '#4338CA',
   primaryLight: '#6366F1',
@@ -24,7 +61,55 @@ export const colors = {
   info: '#3B82F6',
 
   shadow: '#0F172A',
-} as const;
+
+  tintPrimary: '#E0E7FF',
+  tintSuccess: '#DCFCE7',
+  tintDanger: '#FEE2E2',
+  tintWarning: '#FEF3C7',
+  tintPurple: '#EDE9FE',
+  tintRose: '#FFE4E6',
+  tintSelected: '#EEF2FF',
+  tintNeutral: '#F3F4F6',
+};
+
+export const darkColors: ColorPalette = {
+  primary: '#818CF8',
+  primaryDark: '#6366F1',
+  primaryLight: '#A5B4FC',
+  accent: '#22D3EE',
+  gradientStart: '#4F46E5',
+  gradientEnd: '#7C3AED',
+
+  background: '#0B1220',
+  surface: '#151C2C',
+  card: '#151C2C',
+
+  text: '#F8FAFC',
+  textSecondary: '#94A3B8',
+  textMuted: '#64748B',
+  textOnPrimary: '#FFFFFF',
+
+  border: '#334155',
+  inputBg: '#1E293B',
+
+  success: '#4ADE80',
+  warning: '#FBBF24',
+  danger: '#F87171',
+  info: '#60A5FA',
+
+  shadow: '#000000',
+
+  tintPrimary: '#312E81',
+  tintSuccess: '#14532D',
+  tintDanger: '#7F1D1D',
+  tintWarning: '#78350F',
+  tintPurple: '#4C1D95',
+  tintRose: '#881337',
+  tintSelected: '#312E81',
+  tintNeutral: '#1F2937',
+};
+
+export const colors = lightColors;
 
 export const spacing = {
   xs: 4,
@@ -54,22 +139,49 @@ export const typography = {
   label: { fontSize: 13, fontWeight: '600' as const, lineHeight: 18 },
 } as const;
 
-export const shadow = {
+export type ShadowTokens = {
   card: {
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
-  },
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
   soft: {
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-} as const;
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
+};
+
+export function createShadow(palette: ColorPalette): ShadowTokens {
+  return {
+    card: {
+      shadowColor: palette.shadow,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: palette === darkColors ? 0.35 : 0.08,
+      shadowRadius: 16,
+      elevation: 4,
+    },
+    soft: {
+      shadowColor: palette.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: palette === darkColors ? 0.28 : 0.06,
+      shadowRadius: 10,
+      elevation: 2,
+    },
+  };
+}
+
+export const shadow = createShadow(lightColors);
 
 export const theme = { colors, spacing, radius, typography, shadow };
 export type Theme = typeof theme;
+export type ColorScheme = 'light' | 'dark';
+export type ThemePreference = 'system' | ColorScheme;
+
+export function getPalette(scheme: ColorScheme): ColorPalette {
+  return scheme === 'dark' ? darkColors : lightColors;
+}

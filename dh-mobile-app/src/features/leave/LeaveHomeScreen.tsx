@@ -10,7 +10,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { fetchLeaveBalances } from '../../api/endpoints/leave';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { LeaveBalanceSummary } from '../../types/leave';
 import type { MobileShortLeaveEntry } from '../../types/shortLeave';
@@ -45,13 +47,14 @@ type LeaveWidget = {
   fullWidth?: boolean;
 };
 
-const leaveWidgets: LeaveWidget[] = [
+function getLeaveWidgets(colors: ColorPalette): LeaveWidget[] {
+  return [
   {
     key: 'add-leave',
     title: 'Add Leave',
     subtitle: 'Submit a new request',
     emoji: '➕',
-    tint: '#E0E7FF',
+    tint: colors.tintPrimary,
     accent: colors.primary,
   },
   {
@@ -59,7 +62,7 @@ const leaveWidgets: LeaveWidget[] = [
     title: 'View Leave',
     subtitle: 'See your requests',
     emoji: '📋',
-    tint: '#DCFCE7',
+    tint: colors.tintSuccess,
     accent: colors.success,
   },
   {
@@ -67,15 +70,15 @@ const leaveWidgets: LeaveWidget[] = [
     title: 'Add Short Leave',
     subtitle: 'Submit a short leave',
     emoji: '⏱️',
-    tint: '#EDE9FE',
-    accent: '#7C3AED',
+    tint: colors.tintPurple,
+    accent: colors.gradientEnd,
   },
   {
     key: 'view-short-leave',
     title: 'View Short Leave',
     subtitle: 'See short leave history',
     emoji: '📝',
-    tint: '#FFE4E6',
+    tint: colors.tintRose,
     accent: colors.danger,
   },
   {
@@ -83,11 +86,12 @@ const leaveWidgets: LeaveWidget[] = [
     title: 'View Leave Balance',
     subtitle: 'Annual, casual, medical & no pay',
     emoji: '📊',
-    tint: '#FEF3C7',
+    tint: colors.tintWarning,
     accent: colors.warning,
     fullWidth: true,
   },
 ];
+}
 
 type BalanceRow = {
   key: string;
@@ -114,6 +118,7 @@ function formatBalanceValue(value: number | null): string {
 function buildBalanceRows(
   balances: LeaveBalanceSummary,
   monthLabel: string,
+  colors: ColorPalette,
 ): BalanceRow[] {
   return [
     {
@@ -171,6 +176,9 @@ function sumTakenAndRemaining(balances: LeaveBalanceSummary): {
 }
 
 export function LeaveHomeScreen({ session, onBack }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const leaveWidgets = getLeaveWidgets(colors);
   const [screen, setScreen] = useState<Screen>('home');
   const [editLeaveId, setEditLeaveId] = useState<number | null>(null);
   const [editShortLeaveEntry, setEditShortLeaveEntry] =
@@ -185,6 +193,7 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
   const balanceRows = buildBalanceRows(
     balances ?? { annual: null, casual: null, shortLeaveThisMonth: null },
     monthLabel,
+    colors,
   );
   const balanceTotals = balances ? sumTakenAndRemaining(balances) : null;
 
@@ -481,7 +490,8 @@ export function LeaveHomeScreen({ session, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -584,7 +594,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   summaryBadge: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.tintSuccess,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
@@ -711,4 +721,5 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: radius.pill,
   },
-});
+  });
+}
