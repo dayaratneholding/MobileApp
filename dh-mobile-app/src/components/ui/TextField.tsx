@@ -22,6 +22,9 @@ export function TextField({
   isPassword = false,
   error,
   style,
+  onFocus,
+  onBlur,
+  multiline,
   ...rest
 }: Props) {
   const [focused, setFocused] = useState(false);
@@ -35,15 +38,24 @@ export function TextField({
           styles.field,
           focused && styles.fieldFocused,
           error ? styles.fieldError : null,
+          multiline ? styles.fieldMultiline : null,
         ]}
       >
         {icon ? <View style={styles.icon}>{icon}</View> : null}
         <TextInput
-          style={[styles.input, style]}
+          style={[styles.input, multiline && styles.inputMultiline, style]}
           placeholderTextColor={colors.textMuted}
           secureTextEntry={hidden}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
           {...rest}
         />
         {isPassword ? (
@@ -77,6 +89,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     height: 54,
   },
+  fieldMultiline: {
+    height: undefined,
+    minHeight: 96,
+    alignItems: 'flex-start',
+    paddingVertical: spacing.md,
+  },
   fieldFocused: {
     borderColor: colors.primary,
     backgroundColor: colors.surface,
@@ -92,6 +110,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text,
     height: '100%',
+    paddingVertical: 0,
+  },
+  inputMultiline: {
+    height: undefined,
+    minHeight: 72,
   },
   toggle: {
     ...typography.label,

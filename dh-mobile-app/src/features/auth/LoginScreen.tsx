@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import {
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,6 +13,7 @@ import { getUserCompanies } from '../../api/endpoints/companies';
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
 import { CompanyPicker } from '../../components/forms/CompanyPicker';
+import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
 import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
 import type { AuthSession, UserCompany } from '../../types/api';
@@ -136,15 +134,7 @@ export function LoginScreen({ onLogin }: Props) {
         </Text>
       </LinearGradient>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+      <KeyboardForm contentContainerStyle={styles.scroll}>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Login to your account</Text>
 
@@ -219,8 +209,7 @@ export function LoginScreen({ onLogin }: Props) {
             Don't have an account?{' '}
             <Text style={styles.footerLink}>Contact HR</Text>
           </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardForm>
     </View>
   );
 }

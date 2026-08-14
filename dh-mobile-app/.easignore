@@ -1,0 +1,12 @@
+# Keep EAS upload lean
+node_modules/
+.expo/
+.expo-tmp-check/
+.git/
+docs/
+tests/
+*.aab
+*.apk
+hcm-swagger.json
+hcm-swagger-live.json
+swagger.json

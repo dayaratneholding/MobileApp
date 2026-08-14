@@ -30,7 +30,27 @@ async function parseJson<T>(
   }
 }
 
-export async function getMobileAppJson<TResponse>(path: string): Promise<TResponse> {
+function buildQueryString(
+  params: Record<string, string | number | boolean | undefined | null>,
+): string {
+  const pairs: string[] = [];
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return;
+    }
+    pairs.push(
+      `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`,
+    );
+  });
+
+  return pairs.length > 0 ? `?${pairs.join('&')}` : '';
+}
+
+export async function getMobileAppJson<TResponse>(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+): Promise<TResponse> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -40,11 +60,13 @@ export async function getMobileAppJson<TResponse>(path: string): Promise<TRespon
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const url = `${MOBILE_APP_API_URL}${path}`;
+  const queryString = query ? buildQueryString(query) : '';
+  const url = `${MOBILE_APP_API_URL}${path}${queryString}`;
 
   logMobileApp(path, {
     url,
     hasToken: Boolean(token),
+    query,
   });
 
   let response: Response;
