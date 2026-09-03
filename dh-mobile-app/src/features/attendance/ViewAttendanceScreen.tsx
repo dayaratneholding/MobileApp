@@ -16,7 +16,9 @@ import { getAttendancePaged } from '../../api/endpoints/attendance';
 import { getEmployeeByEeSerialId } from '../../api/endpoints/employee';
 import { getApiErrorMessage } from '../../api/client/client';
 import { TextField } from '../../components/ui/TextField';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { AttendanceListItem } from '../../types/attendance';
 import {
@@ -50,6 +52,7 @@ function sortByDateDesc(items: AttendanceListItem[]): AttendanceListItem[] {
 }
 
 function AttendanceRecordCard({ item }: { item: AttendanceListItem }) {
+  const styles = useThemedStyles(createStyles);
   const status = item.attendanceStatus?.trim() || (item.active ? 'Present' : '—');
 
   return (
@@ -87,6 +90,8 @@ function AttendanceRecordCard({ item }: { item: AttendanceListItem }) {
 }
 
 export function ViewAttendanceScreen({ session, onBack }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [allItems, setAllItems] = useState<AttendanceListItem[]>([]);
   const [eeid, setEeid] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -350,7 +355,8 @@ export function ViewAttendanceScreen({ session, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -478,7 +484,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.pill,
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.tintSuccess,
   },
   statusText: {
     ...typography.caption,
@@ -521,4 +527,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     lineHeight: 20,
   },
-});
+  });
+}

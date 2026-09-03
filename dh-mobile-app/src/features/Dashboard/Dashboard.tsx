@@ -13,10 +13,19 @@ import { StatusBar } from 'expo-status-bar';
 import { getAttendanceSummary } from '../../api/endpoints/attendance';
 import { getEmployeeLoanPaged } from '../../api/endpoints/employeeLoan';
 import { fetchLeaveBalances } from '../../api/endpoints/leave';
+import {
+  getEmployeePayrollPeriods,
+  getPayrollPeriods,
+} from '../../api/endpoints/payrollPeriod';
 import { getApiErrorMessage } from '../../api/client/client';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { ThemeToggle } from '../../components/ui/ThemeToggle';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { AttendanceSummary } from '../../types/attendance';
+import type { EmployeeLoanListItem } from '../../types/employeeLoan';
+import type { PayrollPeriodItem } from '../../types/payslip';
 import { LeaveHomeScreen } from '../leave/LeaveHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 import { PayslipScreen } from '../payslip/PayslipScreen';
@@ -49,13 +58,119 @@ function formatCount(value: number | null): string {
   return value.toFixed(1);
 }
 
+function toDayStart(value?: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function mergePayrollPeriods(
+  ...lists: PayrollPeriodItem[][]
+): PayrollPeriodItem[] {
+  const merged = new Map<string, PayrollPeriodItem>();
+
+  lists.flat().forEach((period) => {
+    merged.set(period.payPeriod, period);
+  });
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const aTime = toDayStart(a.payrollStart) ?? 0;
+    const bTime = toDayStart(b.payrollStart) ?? 0;
+    if (aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    return b.payPeriod.localeCompare(a.payPeriod);
+  });
+}
+
+function getCurrentPayrollPeriod(
+  periods: PayrollPeriodItem[],
+  now = new Date(),
+): PayrollPeriodItem | null {
+  if (periods.length === 0) {
+    return null;
+  }
+
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const todayTime = today.getTime();
+
+  const containing = periods.find((period) => {
+    const start = toDayStart(period.payrollStart);
+    const end = toDayStart(period.payrollEnd);
+    if (start == null || end == null) {
+      return false;
+    }
+
+    return todayTime >= start && todayTime <= end;
+  });
+
+  return containing ?? periods[0] ?? null;
+}
+
+function isStartDateInPayrollPeriod(
+  startDate: string | null | undefined,
+  period: PayrollPeriodItem,
+): boolean {
+  const startTime = toDayStart(startDate);
+  if (startTime == null) {
+    return false;
+  }
+
+  const periodStart = toDayStart(period.payrollStart);
+  const periodEnd = toDayStart(period.payrollEnd);
+
+  if (periodStart != null && periodEnd != null) {
+    return startTime >= periodStart && startTime <= periodEnd;
+  }
+
+  // Fallback when API only returns payPeriod label (e.g. "2026-08").
+  const label = period.payPeriod.trim();
+  const yearMonthMatch = label.match(/(\d{4})[-/](\d{1,2})/);
+  if (yearMonthMatch) {
+    const year = Number(yearMonthMatch[1]);
+    const month = Number(yearMonthMatch[2]);
+    const date = new Date(startTime);
+    return date.getFullYear() === year && date.getMonth() + 1 === month;
+  }
+
+  return false;
+}
+
+function countActiveAdvancesInPeriod(
+  items: EmployeeLoanListItem[],
+  period: PayrollPeriodItem | null,
+): number {
+  const activeItems = items.filter((item) => item.active);
+
+  if (!period) {
+    return activeItems.length;
+  }
+
+  return activeItems.filter((item) =>
+    isStartDateInPayrollPeriod(item.startDate, period),
+  ).length;
+}
+
 export function Dashboard({ session, onLogout }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [activeScreen, setActiveScreen] = useState<
     'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance'
   >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
   const [salaryAdvanceCount, setSalaryAdvanceCount] = useState<number | null>(null);
+  const [salaryAdvancePeriod, setSalaryAdvancePeriod] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState('');
 
@@ -79,15 +194,24 @@ export function Dashboard({ session, onLogout }: Props) {
     setSummaryError('');
 
     try {
-      const [attendanceResult, leaveResult, salaryAdvanceResult] =
-        await Promise.allSettled([
+      const [
+        attendanceResult,
+        leaveResult,
+        salaryAdvanceResult,
+        companyPeriodsResult,
+        employeePeriodsResult,
+      ] = await Promise.allSettled([
         getAttendanceSummary(eeSerialID),
         fetchLeaveBalances(eeSerialID, session.comSerialID),
         getEmployeeLoanPaged({
           PageNumber: 1,
-          PageSize: 20,
+          PageSize: 50,
           EESerialID: eeSerialID,
+          SortColumn: 'startDate',
+          SortDirection: 'desc',
         }),
+        getPayrollPeriods(session.comSerialID),
+        getEmployeePayrollPeriods(eeSerialID),
       ]);
 
       if (attendanceResult.status === 'fulfilled') {
@@ -109,11 +233,26 @@ export function Dashboard({ session, onLogout }: Props) {
         setLeaveRemaining(null);
       }
 
+      const companyPeriods =
+        companyPeriodsResult.status === 'fulfilled'
+          ? companyPeriodsResult.value
+          : [];
+      const employeePeriods =
+        employeePeriodsResult.status === 'fulfilled'
+          ? employeePeriodsResult.value
+          : [];
+      const currentPeriod = getCurrentPayrollPeriod(
+        mergePayrollPeriods(companyPeriods, employeePeriods),
+      );
+      setSalaryAdvancePeriod(currentPeriod?.payPeriod ?? null);
+
       if (salaryAdvanceResult.status === 'fulfilled') {
-        const activeAdvances = salaryAdvanceResult.value.items.filter(
-          (item) => item.active,
+        setSalaryAdvanceCount(
+          countActiveAdvancesInPeriod(
+            salaryAdvanceResult.value.items,
+            currentPeriod,
+          ),
         );
-        setSalaryAdvanceCount(activeAdvances.length);
       } else {
         setSalaryAdvanceCount(null);
       }
@@ -143,7 +282,7 @@ export function Dashboard({ session, onLogout }: Props) {
         value:
           leaveRemaining !== null ? `${formatCount(leaveRemaining)} days` : '—',
         emoji: '🏖️',
-        tint: '#E0E7FF',
+        tint: colors.tintPrimary,
         accent: colors.primary,
       },
       {
@@ -156,32 +295,41 @@ export function Dashboard({ session, onLogout }: Props) {
             ? `${formatCount(attendance.attendanceCount)} days`
             : '—',
         emoji: '🕒',
-        tint: '#DCFCE7',
+        tint: colors.tintSuccess,
         accent: colors.success,
       },
       {
         key: 'salary',
         title: 'Salary',
-        subtitle: 'Next payout',
-        value: 'Jul 30',
+        subtitle: '',
+        value: '',
         emoji: '💰',
-        tint: '#FEF3C7',
+        tint: colors.tintWarning,
         accent: colors.warning,
       },
       {
         key: 'salary-advance',
         title: 'Salary Advance',
-        subtitle: 'Active requests',
+        subtitle: salaryAdvancePeriod
+          ? `Current period · ${salaryAdvancePeriod}`
+          : 'Current payroll period',
         value:
           salaryAdvanceCount !== null
             ? `${formatCount(salaryAdvanceCount)} active`
-            : 'Open',
+            : '—',
         emoji: '💳',
-        tint: '#FEE2E2',
+        tint: colors.tintDanger,
         accent: colors.danger,
       },
     ],
-    [attendance?.attendanceCount, leaveRemaining, monthLabel, salaryAdvanceCount],
+    [
+      attendance?.attendanceCount,
+      colors,
+      leaveRemaining,
+      monthLabel,
+      salaryAdvanceCount,
+      salaryAdvancePeriod,
+    ],
   );
 
   if (activeScreen === 'leave') {
@@ -242,9 +390,12 @@ export function Dashboard({ session, onLogout }: Props) {
               </View>
               <Text style={styles.brandName}>{session.companyCode}</Text>
             </View>
-            <Pressable style={styles.logoutBtn} onPress={onLogout} hitSlop={8}>
-              <Text style={styles.logoutText}>Logout</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <ThemeToggle />
+              <Pressable style={styles.logoutBtn} onPress={onLogout} hitSlop={8}>
+                <Text style={styles.logoutText}>Logout</Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.greetingBlock}>
@@ -327,24 +478,28 @@ export function Dashboard({ session, onLogout }: Props) {
           <Text style={styles.sectionTitle}>Quick links</Text>
           <View style={styles.linksCard}>
             <Row
+              styles={styles}
               emoji="✅"
               label="View Attendance"
               onPress={() => setActiveScreen('attendance')}
             />
-            <Divider />
+            <Divider styles={styles} />
             <Row
+              styles={styles}
               emoji="📝"
               label="Apply for Leave"
               onPress={() => setActiveScreen('leave')}
             />
-            <Divider />
+            <Divider styles={styles} />
             <Row
+              styles={styles}
               emoji="📄"
               label="View Payslip"
               onPress={() => setActiveScreen('payslip')}
             />
-            <Divider />
+            <Divider styles={styles} />
             <Row
+              styles={styles}
               emoji="💳"
               label="Request Salary Advance"
               onPress={() => setActiveScreen('salary-advance')}
@@ -358,11 +513,12 @@ export function Dashboard({ session, onLogout }: Props) {
 }
 
 function Row({
+  styles,
   emoji,
   label,
   onPress,
-  last = false,
 }: {
+  styles: ReturnType<typeof createStyles>;
   emoji: string;
   label: string;
   onPress?: () => void;
@@ -377,11 +533,12 @@ function Row({
   );
 }
 
-function Divider() {
+function Divider({ styles }: { styles: ReturnType<typeof createStyles> }) {
   return <View style={styles.rowDivider} />;
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -396,6 +553,10 @@ const styles = StyleSheet.create({
   appBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   brandRow: {
@@ -580,4 +741,5 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
   },
-});
+  });
+}

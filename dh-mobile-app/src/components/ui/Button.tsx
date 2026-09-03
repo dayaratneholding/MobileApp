@@ -2,12 +2,13 @@ import React from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   Text,
   ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, radius, spacing, typography } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 
 type Variant = 'primary' | 'outline' | 'ghost';
 
@@ -28,6 +29,8 @@ export function Button({
   disabled = false,
   style,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isDisabled = disabled || loading;
 
   if (variant === 'primary') {
@@ -78,34 +81,36 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-  gradient: {
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  nonPrimary: {
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    backgroundColor: 'transparent',
-  },
-  outline: {
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  primaryLabel: {
-    ...typography.title,
-    color: colors.textOnPrimary,
-  },
-  secondaryLabel: {
-    ...typography.title,
-    color: colors.primary,
-  },
-});
+function createStyles(colors: ColorPalette) {
+  return {
+    base: {
+      borderRadius: radius.md,
+      overflow: 'hidden' as const,
+    },
+    gradient: {
+      height: 54,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      paddingHorizontal: spacing.xl,
+    },
+    nonPrimary: {
+      height: 54,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      paddingHorizontal: spacing.xl,
+      backgroundColor: 'transparent',
+    },
+    outline: {
+      borderWidth: 1.5,
+      borderColor: colors.border,
+    },
+    primaryLabel: {
+      ...typography.title,
+      color: colors.textOnPrimary,
+    },
+    secondaryLabel: {
+      ...typography.title,
+      color: colors.primary,
+    },
+  };
+}

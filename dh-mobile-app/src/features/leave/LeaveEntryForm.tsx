@@ -20,7 +20,9 @@ import { Button } from '../../components/ui/Button';
 import { OptionPicker } from '../../components/forms/OptionPicker';
 import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import {
   HalfDay,
@@ -52,6 +54,8 @@ export function LeaveEntryForm({
   onBack,
   onSuccess,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isEditMode = editLeaveId != null;
 
   const [leaveType, setLeaveType] = useState<LeaveType>(LeaveType.Annual);
@@ -363,7 +367,8 @@ export function LeaveEntryForm({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -450,4 +455,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     lineHeight: 20,
   },
-});
+  });
+}

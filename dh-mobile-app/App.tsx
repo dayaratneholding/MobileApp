@@ -3,15 +3,16 @@ import { StyleSheet, View } from 'react-native';
 import { LoginScreen } from './src/features/auth/LoginScreen';
 import { HomeScreen } from './src/features/home/HomeScreen';
 import { Dashboard } from './src/features/Dashboard/Dashboard';
-import { colors } from './src/styles/theme';
 import type { AuthSession } from './src/types/api';
 import { setAuthToken } from './src/services/authToken';
+import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 
 type AppPhase = 'home-preview' | 'login' | 'authenticated';
 
 const SPLASH_DURATION_MS = 5000;
 
-export default function App() {
+function AppShell() {
+  const { colors } = useTheme();
   const [phase, setPhase] = useState<AppPhase>('home-preview');
   const [session, setSession] = useState<AuthSession | null>(null);
 
@@ -38,7 +39,7 @@ export default function App() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {phase === 'authenticated' ? (
         <Dashboard session={session!} onLogout={handleLogout} />
       ) : phase === 'home-preview' ? (
@@ -50,9 +51,16 @@ export default function App() {
   );
 }
 
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppShell />
+    </ThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
 });

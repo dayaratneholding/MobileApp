@@ -15,7 +15,9 @@ import { StatusBar } from 'expo-status-bar';
 import { getMobileLeaveEntries } from '../../api/endpoints/leave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { TextField } from '../../components/ui/TextField';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { MobileLeaveEntry } from '../../types/leave';
 
@@ -59,6 +61,7 @@ function LeaveRecordCard({
   showEdit: boolean;
   onEdit: (leaveId: number) => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -132,6 +135,8 @@ export function ViewLeaveScreen({
   onBack,
   onEditLeave,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [items, setItems] = useState<MobileLeaveEntry[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -344,7 +349,8 @@ export function ViewLeaveScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -398,7 +404,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.tintSelected,
     borderColor: colors.primary,
   },
   filterChipText: {
@@ -445,10 +451,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   statusActive: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.tintSuccess,
   },
   statusInactive: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.tintDanger,
   },
   statusText: {
     ...typography.caption,
@@ -508,4 +514,5 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.textOnPrimary,
   },
-});
+  });
+}

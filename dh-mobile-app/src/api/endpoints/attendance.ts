@@ -23,11 +23,68 @@ function coerceCount(value: unknown): number | null {
   return null;
 }
 
-function readField(record: Record<string, unknown>, keys: string[]): number | null {
+/** Converts API late values (minutes, TimeSpan strings, or ticks) into whole minutes. */
+function coerceMinutes(value: unknown): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const hours = coerceCount(record.hours ?? record.Hours) ?? 0;
+    const minutes = coerceCount(record.minutes ?? record.Minutes) ?? 0;
+    const seconds = coerceCount(record.seconds ?? record.Seconds) ?? 0;
+    if (hours === 0 && minutes === 0 && seconds === 0) {
+      return 0;
+    }
+    return Math.round(hours * 60 + minutes + seconds / 60);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const timeMatch = trimmed.match(/^(-)?(\d+):(\d{1,2})(?::(\d{1,2})(?:\.\d+)?)?$/);
+    if (timeMatch) {
+      const sign = timeMatch[1] ? -1 : 1;
+      const hours = Number(timeMatch[2]);
+      const minutes = Number(timeMatch[3]);
+      const seconds = Number(timeMatch[4] ?? 0);
+      return sign * Math.round(hours * 60 + minutes + seconds / 60);
+    }
+  }
+
+  const numeric = coerceCount(value);
+  if (numeric === null) {
+    return null;
+  }
+
+  // .NET TimeSpan ticks (1 minute = 600_000_000 ticks)
+  if (Math.abs(numeric) >= 600_000_000) {
+    return Math.round(numeric / 600_000_000);
+  }
+
+  return Math.round(numeric);
+}
+
+function readField(
+  record: Record<string, unknown>,
+  keys: string[],
+  coerce: (value: unknown) => number | null = coerceCount,
+): number | null {
+  const entries = Object.entries(record);
+
   for (const key of keys) {
-    const count = coerceCount(record[key]);
-    if (count !== null) {
-      return count;
+    const exact = coerce(record[key]);
+    if (exact !== null) {
+      return exact;
+    }
+
+    const lowerKey = key.toLowerCase();
+    const match = entries.find(([entryKey]) => entryKey.toLowerCase() === lowerKey);
+    if (match) {
+      const count = coerce(match[1]);
+      if (count !== null) {
+        return count;
+      }
     }
   }
 
@@ -65,13 +122,22 @@ function parseAttendanceSummaryResponse(result: unknown): AttendanceSummary {
     'totalAttendance',
   ]);
 
-  const lateMinutes = readField(record, [
-    'lateMinutes',
-    'lateMinute',
-    'lateminutes',
-    'totalLateMinutes',
-    'lateMin',
-  ]);
+  // Prefer totalLateMinutes — the MobileApp API field. Some payloads also include
+  // lateMinutes/lateMinute as 0 or a daily value, which previously hid the real total.
+  const lateMinutes = readField(
+    record,
+    [
+      'totalLateMinutes',
+      'totalLateMinute',
+      'lateMinutesTotal',
+      'lateMinTotal',
+      'lateMinutes',
+      'lateMinute',
+      'lateminutes',
+      'lateMin',
+    ],
+    coerceMinutes,
+  );
 
   const overtimeCount = readField(record, [
     'overtimeCount',

@@ -15,7 +15,9 @@ import { StatusBar } from 'expo-status-bar';
 import { getMobileShortLeaveEntries } from '../../api/endpoints/shortLeave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { TextField } from '../../components/ui/TextField';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { MobileShortLeaveEntry } from '../../types/shortLeave';
 import { getSlotLabel } from '../../types/shortLeave';
@@ -56,6 +58,7 @@ function ShortLeaveRecordCard({
   showEdit: boolean;
   onEdit: (entry: MobileShortLeaveEntry) => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -122,6 +125,8 @@ export function ViewShortLeaveScreen({
   onBack,
   onEditShortLeave,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [items, setItems] = useState<MobileShortLeaveEntry[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -338,7 +343,8 @@ export function ViewShortLeaveScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -392,7 +398,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.tintSelected,
     borderColor: colors.primary,
   },
   filterChipText: {
@@ -439,10 +445,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   statusActive: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.tintSuccess,
   },
   statusInactive: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.tintDanger,
   },
   statusText: {
     ...typography.caption,
@@ -509,4 +515,5 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.textOnPrimary,
   },
-});
+  });
+}

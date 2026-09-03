@@ -9,7 +9,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { colors, radius, spacing, typography, shadow } from '../../styles/theme';
+import { ThemeToggle } from '../../components/ui/ThemeToggle';
+import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useThemedStyles } from '../../theme/useThemedStyles';
 
 type Props = {
   userEmail?: string;
@@ -18,16 +21,16 @@ type Props = {
 };
 
 const quickActions = [
-  { key: 'checkin', label: 'Check In', emoji: '✅', tint: '#DCFCE7' },
-  { key: 'checkout', label: 'Check Out', emoji: '🏁', tint: '#FEE2E2' },
-  { key: 'leave', label: 'Apply Leave', emoji: '🏖️', tint: '#E0E7FF' },
-  { key: 'reports', label: 'Reports', emoji: '📊', tint: '#FEF3C7' },
+  { key: 'checkin', label: 'Check In', emoji: '✅', tintKey: 'tintSuccess' as const },
+  { key: 'checkout', label: 'Check Out', emoji: '🏁', tintKey: 'tintDanger' as const },
+  { key: 'leave', label: 'Apply Leave', emoji: '🏖️', tintKey: 'tintPrimary' as const },
+  { key: 'reports', label: 'Reports', emoji: '📊', tintKey: 'tintWarning' as const },
 ];
 
 const leaveBalances = [
-  { key: 'annual', label: 'Annual', used: 6, total: 14, color: colors.primary },
-  { key: 'casual', label: 'Casual', used: 3, total: 7, color: colors.accent },
-  { key: 'sick', label: 'Sick', used: 1, total: 7, color: colors.warning },
+  { key: 'annual', label: 'Annual', used: 6, total: 14, colorKey: 'primary' as const },
+  { key: 'casual', label: 'Casual', used: 3, total: 7, colorKey: 'accent' as const },
+  { key: 'sick', label: 'Sick', used: 1, total: 7, colorKey: 'warning' as const },
 ];
 
 const activity = [
@@ -37,6 +40,8 @@ const activity = [
 ];
 
 export function HomeScreen({ userEmail, isPreview = false, onLogout }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const name = userEmail ? userEmail.split('@')[0] : 'Employee';
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -65,11 +70,14 @@ export function HomeScreen({ userEmail, isPreview = false, onLogout }: Props) {
               </View>
               <Text style={styles.brandName}>PSK</Text>
             </View>
-            {!isPreview ? (
-              <Pressable style={styles.logoutBtn} onPress={onLogout} hitSlop={8}>
-                <Text style={styles.logoutText}>Logout</Text>
-              </Pressable>
-            ) : null}
+            <View style={styles.headerActions}>
+              <ThemeToggle />
+              {!isPreview ? (
+                <Pressable style={styles.logoutBtn} onPress={onLogout} hitSlop={8}>
+                  <Text style={styles.logoutText}>Logout</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.greetingBlock}>
@@ -105,7 +113,7 @@ export function HomeScreen({ userEmail, isPreview = false, onLogout }: Props) {
           <View style={styles.grid}>
             {quickActions.map((a) => (
               <Pressable key={a.key} style={styles.actionCard}>
-                <View style={[styles.actionIcon, { backgroundColor: a.tint }]}>
+                <View style={[styles.actionIcon, { backgroundColor: colors[a.tintKey] }]}>
                   <Text style={styles.actionEmoji}>{a.emoji}</Text>
                 </View>
                 <Text style={styles.actionLabel}>{a.label}</Text>
@@ -140,7 +148,7 @@ export function HomeScreen({ userEmail, isPreview = false, onLogout }: Props) {
                     <View
                       style={[
                         styles.trackFill,
-                        { width: `${pct * 100}%`, backgroundColor: b.color },
+                        { width: `${pct * 100}%`, backgroundColor: colors[b.colorKey] },
                       ]}
                     />
                   </View>
@@ -173,7 +181,8 @@ export function HomeScreen({ userEmail, isPreview = false, onLogout }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -191,6 +200,10 @@ const styles = StyleSheet.create({
   appBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   brandRow: {
@@ -414,4 +427,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-});
+  });
+}
