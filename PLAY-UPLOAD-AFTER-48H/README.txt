@@ -3,12 +3,12 @@
 
 UPLOAD THIS FILE TO PLAY CONSOLE:
   dh-mobile-app.aab
-  (also copied as dh-mobile-app-v1.0.1-versionCode2.aab)
+  (also: dh-mobile-app-v1.0.2-versionCode3.aab)
 
-App version: 1.0.1
-Android versionCode: 2
+App version: 1.0.2
+Android versionCode: 3
 
-Keystore: upload-keystore.jks (see keystore-info.txt for password)
+Keystore: upload-keystore.jks (see keystore-info.txt)
 Alias: upload
 
-Do NOT upload older AABs with versionCode 1.
+Do NOT upload older AABs with versionCode 1 or 2.
