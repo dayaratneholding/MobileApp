@@ -31,6 +31,26 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow DH Mobile App to save your location with attendance."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "1e73c65b-5f74-4b12-a303-2012f9018f35"

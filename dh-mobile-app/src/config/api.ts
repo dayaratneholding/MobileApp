@@ -18,4 +18,8 @@ export const HCM_API_PREFIX = '/api/v1/hcm';
 
 export const API_URL = `https://core.pskerp.com/api/v1/core`;          // Resolves to: https://core.prasuking.com/api/v1/core
 export const HCM_API_URL = `https://hcm.pskerp.com/api/v1/hcm`;    // Resolves to: https://hcm.prasuking.com/api/v1/hcm
-export const MOBILE_APP_API_URL = `https://hcm.pskerp.com/api/MobileApp`; // Resolves to: https://hcm.prasuking.com/api/v1/MobileApp
+export const MOBILE_APP_API_URL = `https://hcm.pskerp.com/api/MobileApp`; // Resolves to: https://hcm.pskerp.com/api/v1/MobileApp
+
+// Published face API container on the ERP server (host port 7013).
+export const FACE_API_URL = 'http://2.24.130.171:7013';
+export const FACE_API_KEY = 'dev-face-key';
