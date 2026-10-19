@@ -27,6 +27,7 @@ import type { AttendanceSummary } from '../../types/attendance';
 import type { EmployeeLoanListItem } from '../../types/employeeLoan';
 import type { PayrollPeriodItem } from '../../types/payslip';
 import { LeaveHomeScreen } from '../leave/LeaveHomeScreen';
+import { MachinesHomeScreen } from '../machines/MachinesHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 import { PayslipScreen } from '../payslip/PayslipScreen';
 import { ViewAttendanceScreen } from '../attendance/ViewAttendanceScreen';
@@ -165,7 +166,7 @@ export function Dashboard({ session, onLogout }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [activeScreen, setActiveScreen] = useState<
-    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance'
+    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines'
   >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
@@ -321,6 +322,15 @@ export function Dashboard({ session, onLogout }: Props) {
         tint: colors.tintDanger,
         accent: colors.danger,
       },
+      {
+        key: 'machines',
+        title: 'Machines',
+        subtitle: 'PDF upload · IN / OUT',
+        value: 'Upload',
+        emoji: '⚙️',
+        tint: colors.tintPurple,
+        accent: colors.gradientEnd,
+      },
     ],
     [
       attendance?.attendanceCount,
@@ -366,6 +376,10 @@ export function Dashboard({ session, onLogout }: Props) {
         onBack={() => setActiveScreen('main')}
       />
     );
+  }
+
+  if (activeScreen === 'machines') {
+    return <MachinesHomeScreen onBack={() => setActiveScreen('main')} />;
   }
 
   return (
@@ -460,7 +474,9 @@ export function Dashboard({ session, onLogout }: Props) {
                         ? () => setActiveScreen('payslip')
                         : w.key === 'attendance'
                           ? () => setActiveScreen('attendance')
-                          : undefined
+                          : w.key === 'machines'
+                            ? () => setActiveScreen('machines')
+                            : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
@@ -503,6 +519,13 @@ export function Dashboard({ session, onLogout }: Props) {
               emoji="💳"
               label="Request Salary Advance"
               onPress={() => setActiveScreen('salary-advance')}
+            />
+            <Divider styles={styles} />
+            <Row
+              styles={styles}
+              emoji="⚙️"
+              label="Machines PDF Upload"
+              onPress={() => setActiveScreen('machines')}
               last
             />
           </View>
