@@ -1,10 +1,16 @@
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import {
-  MACHINE_PDF_PATHS,
+  createFolder,
+  uploadFiles,
+  type FileUploadResultItem,
+} from '../api/client/fileManagerClient';
+import {
+  getMachineFolderName,
+  getMachineUploadPath,
   type MachineDirection,
 } from '../config/machinePdf';
+import { getApiErrorMessage } from '../api/client/client';
 
 export type PickedPdf = {
   uri: string;
@@ -14,16 +20,22 @@ export type PickedPdf = {
 
 export type UploadedMachinePdf = {
   originalName: string;
+  /** File creation name uploaded to File Manager */
   savedName: string;
-  configuredPath: string;
-  savedUri: string;
+  folderName: string;
+  uploadPath: string;
+  remotePath: string;
+  uploaded?: FileUploadResultItem;
 };
 
 function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** e.g. OUT_2026-03-19_15-30-45.pdf */
+/**
+ * File creation name — same idea as itemscreen buildFolderFileName.
+ * e.g. OUT_2026-03-19_15-30-45.pdf
+ */
 export function buildMachinePdfFilename(
   direction: MachineDirection,
   date = new Date(),
@@ -44,23 +56,7 @@ export function buildMachinePdfFilename(
 }
 
 export function getConfiguredMachinePath(direction: MachineDirection): string {
-  return MACHINE_PDF_PATHS[direction];
-}
-
-/**
- * Resolves a writable folder for the demo.
- * Mobile apps cannot write to Windows drive letters, so we mirror the
- * configured folder name under the app document directory.
- */
-export function resolveWritableMachineDirectory(
-  direction: MachineDirection,
-): string {
-  const base = FileSystem.documentDirectory;
-  if (!base) {
-    throw new Error('Document directory is not available on this device.');
-  }
-
-  return `${base}MachinePDFs/${direction}/`;
+  return getMachineUploadPath(direction);
 }
 
 export async function pickPdf(): Promise<PickedPdf | null> {
@@ -86,38 +82,61 @@ export async function pickPdf(): Promise<PickedPdf | null> {
   };
 }
 
+/**
+ * Same File Manager process as itemscreen:
+ *  1) POST /api/folders  { path: MachinePDFs/IN|OUT }
+ *  2) POST /api/files/upload  multipart path + renamed file
+ */
 export async function uploadMachinePdf(
   direction: MachineDirection,
   picked: PickedPdf,
 ): Promise<UploadedMachinePdf> {
+  const folderName = getMachineFolderName(direction);
+  const uploadPath = getMachineUploadPath(direction);
   const savedName = buildMachinePdfFilename(direction);
-  const configuredPath = getConfiguredMachinePath(direction);
-  const directory = resolveWritableMachineDirectory(direction);
-  const savedUri = `${directory}${savedName}`;
 
-  await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+  try {
+    await createFolder(uploadPath);
 
-  await FileSystem.copyAsync({
-    from: picked.uri,
-    to: savedUri,
-  });
+    const uploadRes = await uploadFiles(
+      uploadPath,
+      [
+        {
+          uri: picked.uri,
+          name: savedName,
+          type: 'application/pdf',
+        },
+      ],
+      true,
+    );
 
-  if (__DEV__) {
-    console.log('[MachinePDF] Uploaded:', {
-      direction,
-      configuredPath,
-      savedUri,
-      savedName,
-      platform: Platform.OS,
-    });
+    const first = uploadRes?.uploaded?.[0];
+    const remotePath =
+      first?.path || `/${uploadPath}/${savedName}`.replace(/\/+/g, '/');
+
+    if (__DEV__) {
+      console.log('[MachinePDF] Uploaded via File Manager:', {
+        direction,
+        folderName,
+        uploadPath,
+        savedName,
+        remotePath,
+        platform: Platform.OS,
+        uploaded: first,
+      });
+    }
+
+    return {
+      originalName: picked.name,
+      savedName: first?.name || savedName,
+      folderName,
+      uploadPath,
+      remotePath,
+      uploaded: first,
+    };
+  } catch (err) {
+    throw new Error(getApiErrorMessage(err));
   }
-
-  return {
-    originalName: picked.name,
-    savedName,
-    configuredPath,
-    savedUri,
-  };
 }
 
 export function formatFileSize(bytes: number | null): string {

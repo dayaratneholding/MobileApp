@@ -10,7 +10,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Button } from '../../components/ui/Button';
-import type { MachineDirection } from '../../config/machinePdf';
+import {
+  getMachineFolderName,
+  getMachineUploadPath,
+  type MachineDirection,
+} from '../../config/machinePdf';
 import {
   radius,
   spacing,
@@ -22,7 +26,6 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import {
   formatFileSize,
-  getConfiguredMachinePath,
   pickPdf,
   uploadMachinePdf,
   type PickedPdf,
@@ -56,7 +59,8 @@ export function MachinePdfUploadScreen({ direction, onBack }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const meta = DIRECTION_META[direction];
-  const configuredPath = getConfiguredMachinePath(direction);
+  const folderName = getMachineFolderName(direction);
+  const uploadPath = getMachineUploadPath(direction);
 
   const [picked, setPicked] = useState<PickedPdf | null>(null);
   const [uploaded, setUploaded] = useState<UploadedMachinePdf | null>(null);
@@ -144,11 +148,16 @@ export function MachinePdfUploadScreen({ direction, onBack }: Props) {
 
         <View style={styles.body}>
           <View style={styles.card}>
-            <Text style={styles.cardLabel}>SAVE LOCATION (DEMO)</Text>
-            <Text style={styles.pathText}>{configuredPath}</Text>
+            <Text style={styles.cardLabel}>FOLDER NAME</Text>
+            <Text style={styles.pathText}>{folderName}</Text>
+
+            <Text style={[styles.cardLabel, styles.pathLabelGap]}>
+              UPLOAD PATH
+            </Text>
+            <Text style={styles.pathText}>{uploadPath}</Text>
             <Text style={styles.hintText}>
-              Demo path — replace in src/config/machinePdf.ts when you have the
-              final folder.
+              Same File Manager process as itemscreen: create folder, then
+              upload with file creation name.
             </Text>
           </View>
 
@@ -172,8 +181,8 @@ export function MachinePdfUploadScreen({ direction, onBack }: Props) {
                 <Text style={styles.emptyEmoji}>📂</Text>
                 <Text style={styles.emptyTitle}>No PDF selected</Text>
                 <Text style={styles.emptySubtitle}>
-                  Choose a PDF to upload. It will be renamed with the current
-                  date and time.
+                  Choose a PDF to upload. It will be renamed with a creation
+                  name before upload.
                 </Text>
               </View>
             )}
@@ -208,7 +217,9 @@ export function MachinePdfUploadScreen({ direction, onBack }: Props) {
           {uploading ? (
             <View style={styles.statusCard}>
               <ActivityIndicator color={colors.primary} />
-              <Text style={styles.statusText}>Uploading and renaming…</Text>
+              <Text style={styles.statusText}>
+                Creating folder and uploading…
+              </Text>
             </View>
           ) : null}
 
@@ -222,18 +233,20 @@ export function MachinePdfUploadScreen({ direction, onBack }: Props) {
             <View style={[styles.statusCard, styles.successCard]}>
               <Text style={styles.successTitle}>Upload successful</Text>
               <Text style={styles.successRow}>
-                Renamed to:{' '}
+                File creation name:{' '}
                 <Text style={styles.successStrong}>{uploaded.savedName}</Text>
               </Text>
               <Text style={styles.successRow}>
-                Configured path:{' '}
-                <Text style={styles.successStrong}>
-                  {uploaded.configuredPath}
-                </Text>
+                Folder name:{' '}
+                <Text style={styles.successStrong}>{uploaded.folderName}</Text>
               </Text>
               <Text style={styles.successRow}>
-                Saved on device:{' '}
-                <Text style={styles.successStrong}>{uploaded.savedUri}</Text>
+                Upload path:{' '}
+                <Text style={styles.successStrong}>{uploaded.uploadPath}</Text>
+              </Text>
+              <Text style={styles.successRow}>
+                Remote path:{' '}
+                <Text style={styles.successStrong}>{uploaded.remotePath}</Text>
               </Text>
             </View>
           ) : null}
@@ -310,6 +323,9 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       letterSpacing: 1,
       fontWeight: '700',
       marginBottom: spacing.md,
+    },
+    pathLabelGap: {
+      marginTop: spacing.lg,
     },
     pathText: {
       ...typography.title,
