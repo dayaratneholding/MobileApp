@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="1682211c-69e8-4b4b-a7ae-d808ae1b9eb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/../dh-mobile-app/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/../dh-mobile-app/app.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../dh-mobile-app/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/../dh-mobile-app/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../dh-mobile-app/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/../dh-mobile-app/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../dh-mobile-app/src/config/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../dh-mobile-app/src/config/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../dh-mobile-app/src/features/Dashboard/Dashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/../dh-mobile-app/src/features/Dashboard/Dashboard.tsx" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 5
+}]]></component>
+  <component name="ProjectId" id="3KiVRJtrQD3tusjUojPZLAvUa6K" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "API-creation-for-the-mobile",
+    "ignore.virus.scanning.warn.message": "true",
+    "junie.onboarding.icon.badge.shown": "true",
+    "last_opened_file_path": "D:/DH Mobile App/face-recognition-api",
+    "to.speed.mode.migration.done": "true"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-f2b7a9f6281b-6e1f45a539f7-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.29346.142" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="1682211c-69e8-4b4b-a7ae-d808ae1b9eb3" name="Changes" comment="" />
+      <created>1792040366009</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1792040366009</updated>
+    </task>
+    <servers />
+  </component>
+</project>
