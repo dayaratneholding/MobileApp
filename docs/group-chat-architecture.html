@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DH Mobile App — Group Chat Architecture</title>
+  <style>
+    @page { size: 13.333in 7.5in; margin: 0; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; background: #efeae3; }
+    body {
+      font-family: "Segoe UI", Aptos, sans-serif;
+      color: #1a2332;
+    }
+    .slide {
+      width: 13.333in;
+      height: 7.5in;
+      overflow: hidden;
+      position: relative;
+      background: #f6f3ee;
+      page-break-after: always;
+      break-after: page;
+    }
+    body.shot .slide { display: none; }
+    body.shot .slide.on { display: block; }
+    body.shot .slide.s1.on { display: grid; }
+
+    .kicker {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 650;
+      color: #1b6b66;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 34px; line-height: 1.05; font-weight: 650; letter-spacing: -0.03em; }
+    h2 { font-size: 28px; line-height: 1.1; font-weight: 650; letter-spacing: -0.03em; }
+    h3 { font-size: 16px; line-height: 1.2; font-weight: 650; }
+    .muted { color: #5c6974; }
+    .footer {
+      position: absolute;
+      left: 36px;
+      right: 36px;
+      bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: #8a8178;
+    }
+
+    /* Slide 1 */
+    .s1 { display: grid; grid-template-columns: 300px 1fr; }
+    .s1 .footer { left: 332px; }
+    .rail {
+      background: #16324f;
+      color: #f6f3ee;
+      padding: 36px 32px 28px;
+      display: flex;
+      flex-direction: column;
+    }
+    .rail .kicker { color: #8fd0cb; }
+    .rail h1 { margin-top: 18px; font-size: 40px; color: white; }
+    .rail .lead {
+      margin-top: 16px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: #d5e0ea;
+    }
+    .stats { margin-top: 28px; display: flex; flex-direction: column; gap: 14px; }
+    .stat .n { font-size: 26px; font-weight: 650; letter-spacing: -0.03em; color: white; }
+    .stat .l { font-size: 13px; color: #b7c6d4; margin-top: 1px; }
+    .rail .stack {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: #d5e0ea;
+    }
+    .rail .stack b { color: white; font-weight: 650; }
+    .main { padding: 32px 36px 40px 32px; display: flex; flex-direction: column; }
+    .main .kicker { margin-bottom: 8px; }
+    .diagram {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 1fr;
+      column-gap: 16px;
+      row-gap: 8px;
+      align-items: stretch;
+    }
+    .box {
+      background: white;
+      border: 1px solid #e4ddd4;
+      border-radius: 12px;
+      padding: 12px 14px 13px;
+    }
+    .box .tag {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #1b6b66;
+    }
+    .box h3 { margin: 4px 0 4px; }
+    .box p { font-size: 12.5px; line-height: 1.35; color: #5c6974; }
+    .phone { grid-column: 2; border-top: 3px solid #1b6b66; }
+    .span-note { grid-column: 1 / -1; text-align: center; font-size: 12px; color: #6d624f; letter-spacing: 0.02em; }
+    .core { border-top: 3px solid #8a8178; }
+    .chat {
+      background: #16324f;
+      border-color: #16324f;
+      color: white;
+    }
+    .chat .tag { color: #8fd0cb; }
+    .chat p { color: #d5e0ea; }
+    .files { border-top: 3px solid #8a8178; }
+    .pair { grid-column: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .sql { border-top: 3px solid #1b6b66; }
+    .push { border-top: 3px solid #b86a32; }
+    .push .tag { color: #b86a32; }
+    .explain {
+      margin-top: 16px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: #3d4a57;
+      max-width: 760px;
+    }
+
+    /* Shared inner slides */
+    .pad { padding: 32px 40px 42px; }
+    .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
+    .head .num { font-size: 13px; letter-spacing: 0.14em; color: #1b6b66; font-weight: 700; }
+    .sub { margin-top: 8px; font-size: 15px; line-height: 1.4; color: #4d5b67; max-width: 860px; }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 26px; }
+    .panel { background: white; border: 1px solid #e4ddd4; border-radius: 14px; padding: 18px 20px 8px; }
+    .panel.ink { background: #16324f; border-color: #16324f; color: white; }
+    .panel h3 { font-size: 18px; margin-bottom: 8px; }
+    .rowline {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      padding: 11px 0;
+      border-top: 1px solid #eee6dc;
+    }
+    .panel.ink .rowline { border-top-color: rgba(255,255,255,0.12); }
+    .rowline strong { display: block; font-size: 14.5px; }
+    .rowline span { display: block; margin-top: 2px; font-size: 13px; line-height: 1.35; color: #5c6974; }
+    .panel.ink .rowline span { color: #d5e0ea; }
+    .idx {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #e5f2f1; color: #1b6b66;
+      font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+    .panel.ink .idx { background: rgba(143,208,203,0.18); color: #8fd0cb; }
+
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 36px; position: relative; }
+    .step {
+      background: white;
+      border: 1px solid #e4ddd4;
+      border-radius: 14px;
+      padding: 18px 16px 16px;
+      min-height: 250px;
+    }
+    .step .n {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #16324f; color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+    }
+    .step h3 { margin: 14px 0 8px; font-size: 18px; }
+    .step p { font-size: 14px; line-height: 1.4; color: #4d5b67; }
+    .rule {
+      margin-top: 22px;
+      background: #e5f2f1;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.4;
+      color: #1a3f3d;
+    }
+
+    .media {
+      display: grid;
+      grid-template-columns: 1.35fr 0.85fr;
+      gap: 22px;
+      margin-top: 26px;
+    }
+    .vstep { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid #eee6dc; }
+    .vstep:first-child { border-top: 0; padding-top: 0; }
+    .vstep .n {
+      flex: 0 0 28px; height: 28px; border-radius: 50%;
+      background: #16324f; color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+    }
+    .vstep h3 { font-size: 16px; }
+    .vstep p { margin-top: 3px; font-size: 13.5px; line-height: 1.4; color: #4d5b67; }
+    .side {
+      background: #16324f;
+      color: white;
+      border-radius: 14px;
+      padding: 20px 20px 8px;
+    }
+    .side h3 { font-size: 18px; margin: 8px 0 12px; }
+    .side .item { padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.12); }
+    .side .item b { display: block; font-size: 14px; }
+    .side .item span { display: block; margin-top: 3px; font-size: 13px; line-height: 1.35; color: #d5e0ea; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 22px; background: white; border-radius: 14px; overflow: hidden; }
+    th, td { text-align: left; padding: 13px 16px; font-size: 14px; vertical-align: top; }
+    th { background: #16324f; color: white; font-weight: 650; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    tr + tr td { border-top: 1px solid #eee6dc; }
+    td.where { font-weight: 650; width: 34%; }
+    .pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .live { background: #e5f2f1; color: #1b6b66; }
+    .badge { background: #e8eef5; color: #16324f; }
+    .alert { background: #f8f0e7; color: #8a4e22; }
+    .quiet { background: #f0ece6; color: #6d624f; }
+
+    .schemas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+    .schema { background: white; border: 1px solid #e4ddd4; border-radius: 12px; overflow: hidden; }
+    .schema header {
+      background: #16324f; color: white;
+      padding: 10px 12px; font-size: 14px; font-weight: 650;
+    }
+    .schema ul { list-style: none; margin: 0; padding: 8px 12px 10px; }
+    .schema li { font-size: 12.5px; padding: 4px 0; color: #3d4a57; border-top: 1px solid #f1ebe4; }
+    .schema li:first-child { border-top: 0; }
+    .bottom {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .note, .host {
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .note { background: #e5f2f1; }
+    .note h3, .host h3 { font-size: 14px; margin-bottom: 6px; }
+    .note p, .host p { font-size: 13px; line-height: 1.4; color: #1a3f3d; }
+    .host { background: white; border: 1px solid #e4ddd4; }
+    .host p { color: #3d4a57; }
+    .chips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .chip {
+      border: 1px solid #d9cfc3;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #16324f;
+      background: #fbf9f6;
+    }
+  </style>
+</head>
+<body>
+  <section class="slide s1">
+    <aside class="rail">
+      <div class="kicker">DH Mobile App</div>
+      <h1>Group chat architecture</h1>
+      <p class="lead">A WhatsApp-style group messenger beside leave, attendance, and payroll.</p>
+      <div class="stats">
+        <div class="stat"><div class="n">200+</div><div class="l">people</div></div>
+        <div class="stat"><div class="n">15</div><div class="l">groups</div></div>
+        <div class="stat"><div class="n">1</div><div class="l">Docker container for the API</div></div>
+      </div>
+      <div class="stack">
+        <div><b>SignalR</b> for live messages</div>
+        <div><b>SQL Server</b> for history</div>
+        <div><b>Same login</b> the app uses today</div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="kicker">How the pieces connect</div>
+      <h2>One new API. Everything else stays.</h2>
+      <div class="diagram">
+        <article class="box phone">
+          <div class="tag">People</div>
+          <h3>Expo mobile app</h3>
+          <p>The employee opens chat after the normal login. One person can be in many groups.</p>
+        </article>
+        <div class="span-note">The phone uses the token from login, then talks to three places.</div>
+        <article class="box core">
+          <div class="tag">Already running</div>
+          <h3>Core and HCM APIs</h3>
+          <p>Login, employees, and company. They issue the token and stay responsible for HR.</p>
+        </article>
+        <article class="box chat">
+          <div class="tag">New · Docker</div>
+          <h3>Chat API + SignalR</h3>
+          <p>Creates groups, saves messages, and pushes each new message to members whose app is open.</p>
+        </article>
+        <article class="box files">
+          <div class="tag">Already running</div>
+          <h3>File storage</h3>
+          <p>Photos, voice notes, video, and documents. The chat message stores the link only.</p>
+        </article>
+        <div class="pair">
+          <article class="box sql">
+            <h3>Chat database</h3>
+            <p>Groups, members, messages, and push tokens.</p>
+          </article>
+          <article class="box push">
+            <div class="tag">When the app is closed</div>
+            <h3>Expo Push</h3>
+            <p>A short alert. Tap opens that group.</p>
+          </article>
+        </div>
+      </div>
+      <p class="explain">Payroll and leave never store chat. The chat API is the only new service, and it runs as one container. SQL Server can be the server you already operate, with a separate database for chat.</p>
+      <div class="footer"><span>Group chat · SignalR · SQL Server · Docker</span><span>01</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <div>
+          <div class="kicker">What changes</div>
+          <h2>The HR app stays. Chat is added beside it.</h2>
+        </div>
+        <div class="num">02</div>
+      </div>
+      <p class="sub">Employees, companies, and login already exist. The new work is groups, messages, files, and notifications.</p>
+      <div class="split">
+        <div class="panel">
+          <h3>Stays as it is</h3>
+          <div class="rowline"><div class="idx">1</div><div><strong>Expo app</strong><span>Chat is a new area inside the current mobile app.</span></div></div>
+          <div class="rowline"><div class="idx">2</div><div><strong>Login token</strong><span>The same JWT carries the user id and the company id.</span></div></div>
+          <div class="rowline"><div class="idx">3</div><div><strong>Employee list</strong><span>Admins add people from that company. A group never mixes companies.</span></div></div>
+          <div class="rowline"><div class="idx">4</div><div><strong>File manager</strong><span>Photos, audio, video, and documents upload there.</span></div></div>
+        </div>
+        <div class="panel ink">
+          <h3>New, for chat only</h3>
+          <div class="rowline"><div class="idx">1</div><div><strong>Chat API in Docker</strong><span>ASP.NET Core. One container is enough for this size.</span></div></div>
+          <div class="rowline"><div class="idx">2</div><div><strong>SignalR</strong><span>The live link. Open phones see a message as soon as it is saved.</span></div></div>
+          <div class="rowline"><div class="idx">3</div><div><strong>SQL Server database</strong><span>A new database on your SQL Server for groups and messages.</span></div></div>
+          <div class="rowline"><div class="idx">4</div><div><strong>Push registration</strong><span>Each phone stores an Expo push token so a closed app can be woken.</span></div></div>
+        </div>
+      </div>
+      <div class="footer"><span>Group chat · SignalR · SQL Server · Docker</span><span>02</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <div>
+          <div class="kicker">Text message</div>
+          <h2>Sending a message</h2>
+        </div>
+        <div class="num">03</div>
+      </div>
+      <p class="sub">The phone shows the message immediately. SQL Server is the record. SignalR carries it to everyone in that group who is online.</p>
+      <div class="steps">
+        <article class="step">
+          <div class="n">1</div>
+          <h3>Write it on the phone</h3>
+          <p>The app creates an id and shows the bubble as sending. That same id is used if the send has to be retried.</p>
+        </article>
+        <article class="step">
+          <div class="n">2</div>
+          <h3>Save one row</h3>
+          <p>The chat API inserts the message in SQL Server. A repeated id returns the original row, so a weak network cannot duplicate it.</p>
+        </article>
+        <article class="step">
+          <div class="n">3</div>
+          <h3>SignalR delivers it</h3>
+          <p>Every member whose app is open in that group receives the message at once. The sender’s bubble becomes sent.</p>
+        </article>
+        <article class="step">
+          <div class="n">4</div>
+          <h3>Update the group list</h3>
+          <p>Other screens show the new preview and the unread count. A person can belong to any of the 15 groups.</p>
+        </article>
+      </div>
+      <div class="rule">An admin adds or removes people and renames the group. Any member can send. History loads in pages, newest first, from SQL Server.</div>
+      <div class="footer"><span>Group chat · SignalR · SQL Server · Docker</span><span>03</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <div>
+          <div class="kicker">Photos, voice, video, files</div>
+          <h2>Sharing a file</h2>
+        </div>
+        <div class="num">04</div>
+      </div>
+      <p class="sub">The file itself never travels through SignalR. Storage holds the bytes. The message holds the link.</p>
+      <div class="media">
+        <div class="panel" style="padding-top: 16px;">
+          <div class="vstep">
+            <div class="n">1</div>
+            <div>
+              <h3>Ask for an upload</h3>
+              <p>The phone tells the chat API the file name, type, and size. The API returns an upload destination.</p>
+            </div>
+          </div>
+          <div class="vstep">
+            <div class="n">2</div>
+            <div>
+              <h3>Send the file to storage</h3>
+              <p>The photo, voice note, video, or document goes to the file manager the app already uses.</p>
+            </div>
+          </div>
+          <div class="vstep">
+            <div class="n">3</div>
+            <div>
+              <h3>Send the message</h3>
+              <p>The chat row stores the type, size, duration, thumbnail, and link. SignalR broadcasts that row, the same way it broadcasts text.</p>
+            </div>
+          </div>
+          <div class="vstep">
+            <div class="n">4</div>
+            <div>
+              <h3>Download when it is on screen</h3>
+              <p>The other phone shows the bubble first, then fetches the file. Voice notes play from the audio file. Video uses a thumbnail until it opens.</p>
+            </div>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="kicker" style="color:#8fd0cb;">What each kind stores</div>
+          <h3>One message shape</h3>
+          <div class="item"><b>Text</b><span>The words, the sender, and the time.</span></div>
+          <div class="item"><b>Photo</b><span>Image link, size, and a preview.</span></div>
+          <div class="item"><b>Voice note</b><span>Audio link and duration.</span></div>
+          <div class="item"><b>Video</b><span>Video link, thumbnail, duration, and a size cap.</span></div>
+          <div class="item"><b>Document</b><span>File link, name, and size.</span></div>
+        </aside>
+      </div>
+      <div class="footer"><span>Group chat · SignalR · SQL Server · Docker</span><span>04</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <div>
+          <div class="kicker">Notifications</div>
+          <h2>When the phone is told</h2>
+        </div>
+        <div class="num">05</div>
+      </div>
+      <p class="sub">SignalR is for people who have the app open. Expo Push is for everyone else. The server decides after the message is saved.</p>
+      <table>
+        <thead>
+          <tr><th>Where that person is</th><th>What they get</th><th>Push</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="where">App open on that group</td>
+            <td>SignalR adds the message to the thread.</td>
+            <td><span class="pill live">No push</span></td>
+          </tr>
+          <tr>
+            <td class="where">App open on another screen</td>
+            <td>The group list and the unread badge update.</td>
+            <td><span class="pill badge">No push</span></td>
+          </tr>
+          <tr>
+            <td class="where">App closed or phone locked</td>
+            <td>Expo Push sends the group name and a short preview, such as “Nimal: Photo”. The tap opens that group.</td>
+            <td><span class="pill alert">Push</span></td>
+          </tr>
+          <tr>
+            <td class="where">Group is muted</td>
+            <td>The message is stored. The badge can update the next time the app opens.</td>
+            <td><span class="pill quiet">No push</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="rule">Opening the thread marks it read. SQL Server stores the last message that person has seen, and the badge is the count of messages after that. Each phone registers its Expo push token at login and removes it at logout.</div>
+      <div class="footer"><span>Group chat · SignalR · SQL Server · Docker</span><span>05</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="pad">
+      <div class="head">
+        <div>
+          <div class="kicker">Database and deploy</div>
+          <h2>SQL Server holds the record. Docker runs the API.</h2>
+        </div>
+        <div class="num">06</div>
+      </div>
+      <p class="sub">Four tables cover groups, membership, messages, and the phones that can receive a push. The live socket is not stored in the database.</p>
+      <div class="schemas">
+        <article class="schema">
+          <header>Group</header>
+          <ul>
+            <li>Id</li>
+            <li>Company id</li>
+            <li>Name and photo</li>
+            <li>Created by</li>
+          </ul>
+        </article>
+        <article class="schema">
+          <header>Member</header>
+          <ul>
+            <li>Group and user</li>
+            <li>Role: admin or member</li>
+            <li>Last read message</li>
+            <li>Muted until</li>
+          </ul>
+        </article>
+        <article class="schema">
+          <header>Message</header>
+          <ul>
+            <li>Id created on the phone</li>
+            <li>Group, sender, time</li>
+            <li>Type: text, image, audio, video, file</li>
+            <li>Text or file link, size, duration</li>
+          </ul>
+        </article>
+        <article class="schema">
+          <header>Device</header>
+          <ul>
+            <li>User</li>
+            <li>Platform</li>
+            <li>Expo push token</li>
+            <li>Removed on logout</li>
+          </ul>
+        </article>
+      </div>
+      <div class="bottom">
+        <div class="host">
+          <h3>Deploy</h3>
+          <p>Put the chat API in one Docker container. Point it at a new database on your SQL Server, and at the file manager you already run. Leave the HCM and core APIs on their current hosts.</p>
+          <div class="chips">
+            <span class="chip">chat-api container</span>
+            <span class="chip">SQL Server database</span>
+            <span class="chip">Existing file manager</span>
+          </div>
+        </div>
+        <div class="note">
+          <h3>Sized for this rollout</h3>
+          <p>About 200 people and 15 groups fit in that single container. A second copy of the API, and Redis in front of SignalR, wait until you run more than one container.</p>
+        </div>
+      </div>
+      <div class="footer"><span>Group chat · SignalR · SQL Server · Docker</span><span>06</span></div>
+    </div>
+  </section>
+  <script>
+    const n = new URLSearchParams(location.search).get("slide") || location.hash.replace("#", "");
+    if (n) {
+      document.body.classList.add("shot");
+      const slides = document.querySelectorAll(".slide");
+      const el = slides[Number(n) - 1];
+      if (el) el.classList.add("on");
+    }
+  </script>
+</body>
+</html>

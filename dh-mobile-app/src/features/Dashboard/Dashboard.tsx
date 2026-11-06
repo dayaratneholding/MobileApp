@@ -31,6 +31,7 @@ import { MachinesHomeScreen } from '../machines/MachinesHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 import { PayslipScreen } from '../payslip/PayslipScreen';
 import { ViewAttendanceScreen } from '../attendance/ViewAttendanceScreen';
+import { ChatHomeScreen } from '../chat/ChatHomeScreen';
 
 type Props = {
   session: AuthSession;
@@ -166,7 +167,7 @@ export function Dashboard({ session, onLogout }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [activeScreen, setActiveScreen] = useState<
-    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines'
+    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines' | 'chat'
   >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
@@ -331,6 +332,15 @@ export function Dashboard({ session, onLogout }: Props) {
         tint: colors.tintPurple,
         accent: colors.gradientEnd,
       },
+      {
+        key: 'chat',
+        title: 'Messages',
+        subtitle: 'Groups and files',
+        value: 'Open',
+        emoji: '💬',
+        tint: colors.tintPrimary,
+        accent: colors.primary,
+      },
     ],
     [
       attendance?.attendanceCount,
@@ -380,6 +390,15 @@ export function Dashboard({ session, onLogout }: Props) {
 
   if (activeScreen === 'machines') {
     return <MachinesHomeScreen onBack={() => setActiveScreen('main')} />;
+  }
+
+  if (activeScreen === 'chat') {
+    return (
+      <ChatHomeScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
   }
 
   return (
@@ -476,7 +495,9 @@ export function Dashboard({ session, onLogout }: Props) {
                           ? () => setActiveScreen('attendance')
                           : w.key === 'machines'
                             ? () => setActiveScreen('machines')
-                            : undefined
+                            : w.key === 'chat'
+                              ? () => setActiveScreen('chat')
+                              : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
@@ -526,6 +547,13 @@ export function Dashboard({ session, onLogout }: Props) {
               emoji="⚙️"
               label="Machines PDF Upload"
               onPress={() => setActiveScreen('machines')}
+            />
+            <Divider styles={styles} />
+            <Row
+              styles={styles}
+              emoji="💬"
+              label="Messages"
+              onPress={() => setActiveScreen('chat')}
               last
             />
           </View>
