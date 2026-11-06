@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import type { HubConnection } from '@microsoft/signalr';
+import { setChatIdentity } from '../../api/client/chatClient';
 import { createGroup, listGroups } from '../../api/endpoints/chat';
 import { getAllUsers, type CoreUser } from '../../api/endpoints/users';
 import { getApiErrorMessage } from '../../api/client/client';
@@ -40,6 +41,7 @@ type Props = {
 type Screen = 'list' | 'create';
 
 export function ChatHomeScreen({ session, onBack }: Props) {
+  setChatIdentity(session.userID, session.comSerialID);
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [screen, setScreen] = useState<Screen>('list');
@@ -238,72 +240,81 @@ export function ChatHomeScreen({ session, onBack }: Props) {
       </LinearGradient>
 
       {screen === 'create' ? (
-        <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-          <TextField
-            label="Group name"
-            value={name}
-            onChangeText={setName}
-            placeholder="Site team"
-          />
-          <TextField
-            label="Add members"
-            value={userQuery}
-            onChangeText={setUserQuery}
-            placeholder="Search by name or user id"
-            autoCapitalize="none"
-          />
-          {selectedUsers.length > 0 ? (
-            <View style={styles.chips}>
-              {selectedUsers.map((user) => (
-                <Pressable
-                  key={user.userID}
-                  style={styles.chip}
-                  onPress={() => toggleUser(user)}
-                >
-                  <Text style={styles.chipText}>{user.userName}</Text>
-                  <Text style={styles.chipRemove}>×</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-          {users.length > 0 ? (
-            <Text style={styles.userCount}>
-              {filteredUsers.length} of {users.length} people
-            </Text>
-          ) : null}
-          <View style={styles.userList}>
-            {usersLoading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : filteredUsers.length === 0 ? (
-              <Text style={styles.userEmpty}>
-                {users.length === 0
-                  ? 'No people were returned.'
-                  : 'No people match that search.'}
-              </Text>
-            ) : (
-              filteredUsers.map((user) => {
-                const picked = selectedUsers.some(
-                  (item) => item.userID.toLowerCase() === user.userID.toLowerCase(),
-                );
-                return (
+        <View style={styles.formWrap}>
+          <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+            <TextField
+              label="Group name"
+              value={name}
+              onChangeText={setName}
+              placeholder="Site team"
+            />
+            <TextField
+              label="Add members"
+              value={userQuery}
+              onChangeText={setUserQuery}
+              placeholder="Search by name or user id"
+              autoCapitalize="none"
+            />
+            {selectedUsers.length > 0 ? (
+              <View style={styles.chips}>
+                {selectedUsers.map((user) => (
                   <Pressable
                     key={user.userID}
-                    style={[styles.userRow, picked && styles.userRowPicked]}
+                    style={styles.chip}
                     onPress={() => toggleUser(user)}
                   >
-                    <View style={styles.userBody}>
-                      <Text style={styles.userName}>{user.userName}</Text>
-                      <Text style={styles.userId}>{user.userID}</Text>
-                    </View>
-                    <Text style={styles.userMark}>{picked ? 'Added' : 'Add'}</Text>
+                    <Text style={styles.chipText}>{user.userName}</Text>
+                    <Text style={styles.chipRemove}>×</Text>
                   </Pressable>
-                );
-              })
-            )}
+                ))}
+              </View>
+            ) : null}
+            {users.length > 0 ? (
+              <Text style={styles.userCount}>
+                {filteredUsers.length} of {users.length} people
+              </Text>
+            ) : null}
+            <ScrollView style={styles.userList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+              {usersLoading ? (
+                <ActivityIndicator color={colors.primary} style={styles.userEmpty} />
+              ) : filteredUsers.length === 0 ? (
+                <Text style={styles.userEmpty}>
+                  {users.length === 0
+                    ? 'No people were returned.'
+                    : 'No people match that search.'}
+                </Text>
+              ) : (
+                filteredUsers.map((user) => {
+                  const picked = selectedUsers.some(
+                    (item) => item.userID.toLowerCase() === user.userID.toLowerCase(),
+                  );
+                  return (
+                    <Pressable
+                      key={user.userID}
+                      style={[styles.userRow, picked && styles.userRowPicked]}
+                      onPress={() => toggleUser(user)}
+                    >
+                      <View style={styles.userBody}>
+                        <Text style={styles.userName}>{user.userName}</Text>
+                        <Text style={styles.userId}>{user.userID}</Text>
+                      </View>
+                      <Text style={styles.userMark}>{picked ? 'Added' : 'Add'}</Text>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+          </ScrollView>
+          <View style={styles.formFooter}>
+            <Button
+              label={creating ? 'Creating…' : 'Create group'}
+              onPress={handleCreate}
+              disabled={creating}
+              loading={creating}
+            />
           </View>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Button label={creating ? 'Creating…' : 'Create group'} onPress={handleCreate} disabled={creating} />
-        </ScrollView>
+        </View>
       ) : (
         <View style={styles.listWrap}>
           {loading ? (
@@ -407,7 +418,11 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     listWrap: { flex: 1 },
     loader: { marginTop: spacing.xxl },
-    list: { padding: spacing.lg, gap: spacing.sm },
+    list: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xxxl + spacing.lg,
+      gap: spacing.sm,
+    },
     emptyWrap: {
       flexGrow: 1,
       alignItems: 'center',
@@ -482,9 +497,15 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       color: colors.textOnPrimary,
       fontWeight: '700',
     },
+    formWrap: { flex: 1 },
     form: {
       padding: spacing.xl,
       gap: spacing.md,
+    },
+    formFooter: {
+      paddingHorizontal: spacing.xl,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xxxl,
     },
     error: {
       ...typography.caption,
@@ -515,11 +536,11 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       marginLeft: spacing.xs,
     },
     userList: {
+      maxHeight: 280,
       backgroundColor: colors.surface,
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: colors.border,
-      overflow: 'hidden',
     },
     userRow: {
       flexDirection: 'row',

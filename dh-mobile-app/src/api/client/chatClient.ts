@@ -2,10 +2,32 @@ import { CHAT_API_URL } from '../../config/api';
 import { getAuthToken } from '../../services/authToken';
 import { ApiError } from './client';
 
+let chatUserId = '';
+let chatCompanyId = '';
+
+/** The chat API reads these on every request, the same way the hub does. */
+export function setChatIdentity(userID: string, comSerialID: number) {
+  chatUserId = userID.trim();
+  chatCompanyId = String(comSerialID);
+}
+
+function withIdentity(path: string): string {
+  const [pathname, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  if (chatUserId) params.set('userID', chatUserId);
+  if (chatCompanyId) params.set('comSerialID', chatCompanyId);
+  const next = params.toString();
+  return next ? `${pathname}?${next}` : pathname;
+}
+
 function errorMessage(body: unknown, status: number): string {
   if (body && typeof body === 'object') {
-    const record = body as { message?: string; title?: string };
+    const record = body as { message?: string; title?: string; messages?: unknown };
     if (record.message) return record.message;
+    if (Array.isArray(record.messages)) {
+      const first = record.messages.find((item) => typeof item === 'string' && item.trim());
+      if (typeof first === 'string') return first;
+    }
     if (record.title) return record.title;
   }
 
@@ -32,7 +54,7 @@ export async function chatRequest<T>(
 
   let response: Response;
   try {
-    response = await fetch(`${CHAT_API_URL}${path}`, {
+    response = await fetch(`${CHAT_API_URL}${withIdentity(path)}`, {
       ...init,
       headers,
     });

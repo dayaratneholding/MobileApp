@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -72,7 +73,17 @@ export function ChatThreadScreen({ group, currentUserId, comSerialID, onBack }: 
   const [error, setError] = useState('');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const listRef = useRef<FlatList<LocalMessage>>(null);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const applyIncoming = useCallback((raw: unknown) => {
     const message = parseChatMessage(raw);
@@ -284,7 +295,7 @@ export function ChatThreadScreen({ group, currentUserId, comSerialID, onBack }: 
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.composer}>
+      <View style={[styles.composer, keyboardOpen ? styles.composerKeyboard : styles.composerResting]}>
         <Pressable style={styles.attach} onPress={handleAttach} disabled={sending}>
           <Text style={styles.attachText}>+</Text>
         </Pressable>
@@ -337,6 +348,7 @@ function createStyles(colors: ColorPalette) {
     loader: { marginTop: spacing.xxl },
     messages: {
       padding: spacing.lg,
+      paddingBottom: spacing.xl,
       flexGrow: 1,
     },
     empty: {
@@ -383,11 +395,17 @@ function createStyles(colors: ColorPalette) {
     composer: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      padding: spacing.sm,
-      paddingBottom: spacing.lg,
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.sm,
       backgroundColor: colors.surface,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
+    },
+    composerResting: {
+      paddingBottom: spacing.xxxl,
+    },
+    composerKeyboard: {
+      paddingBottom: spacing.sm,
     },
     attach: {
       width: 40,
