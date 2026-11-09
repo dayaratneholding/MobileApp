@@ -47,4 +47,5 @@ export type AuthSession = {
   imageProfileUrl?: string | null;
   imageCompanyUrl?: string | null;
   iconCompanyUrl?: string | null;
+  permissionIds: number[];
 };

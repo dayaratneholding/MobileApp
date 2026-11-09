@@ -46,6 +46,7 @@ type Props = {
   group: GroupSummary;
   currentUserId: string;
   comSerialID: number;
+  canDeleteMessages: boolean;
   onBack: () => void;
 };
 
@@ -107,7 +108,13 @@ function attachmentLabel(type: MessageType): string {
   return 'File';
 }
 
-export function ChatThreadScreen({ group, currentUserId, comSerialID, onBack }: Props) {
+export function ChatThreadScreen({
+  group,
+  currentUserId,
+  comSerialID,
+  canDeleteMessages,
+  onBack,
+}: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -253,7 +260,7 @@ export function ChatThreadScreen({ group, currentUserId, comSerialID, onBack }: 
   };
 
   const handleDelete = (message: LocalMessage) => {
-    if (!isMine(message.senderId, currentUserId) || message.deletedAt) return;
+    if (!canDeleteMessages || !isMine(message.senderId, currentUserId) || message.deletedAt) return;
     Alert.alert('Delete message', 'Remove this message for the group?', [
       { text: 'Cancel', style: 'cancel' },
       {

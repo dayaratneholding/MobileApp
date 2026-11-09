@@ -1,4 +1,5 @@
 import { postLogin } from '../client/loginClient';
+import { readPermissionIds } from '../../services/groupPermissions';
 import type { AuthSession, UserCompany } from '../../types/api';
 
 type LoginParams = {
@@ -47,5 +48,6 @@ export async function login({
     imageProfileUrl: data.imageProfileUrl,
     imageCompanyUrl: data.imageCompanyUrl,
     iconCompanyUrl: data.iconCompanyUrl,
+    permissionIds: readPermissionIds(data.token),
   };
 }
