@@ -334,6 +334,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
                 />
               }
               contentContainerStyle={groups.length === 0 ? styles.emptyWrap : styles.list}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
               ListEmptyComponent={
                 <View>
                   <Text style={styles.emptyTitle}>No groups yet</Text>
@@ -355,9 +356,14 @@ export function ChatHomeScreen({ session, onBack }: Props) {
                       <Text style={styles.rowTitle} numberOfLines={1}>
                         {item.name || 'Group'}
                       </Text>
-                      <Text style={styles.rowTime}>{formatChatTime(item.lastMessageAt)}</Text>
+                      <Text style={[styles.rowTime, item.unreadCount > 0 && styles.rowTimeUnread]}>
+                        {formatChatTime(item.lastMessageAt)}
+                      </Text>
                     </View>
-                    <Text style={styles.rowPreview} numberOfLines={1}>
+                    <Text
+                      style={[styles.rowPreview, item.unreadCount > 0 && styles.rowPreviewUnread]}
+                      numberOfLines={1}
+                    >
                       {item.lastMessage || 'No messages yet'}
                     </Text>
                   </View>
@@ -419,9 +425,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     listWrap: { flex: 1 },
     loader: { marginTop: spacing.xxl },
     list: {
-      padding: spacing.lg,
       paddingBottom: spacing.xxxl + spacing.lg,
-      gap: spacing.sm,
     },
     emptyWrap: {
       flexGrow: 1,
@@ -440,19 +444,22 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       textAlign: 'center',
       marginTop: spacing.sm,
     },
+    separator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.border,
+      marginLeft: 76,
+    },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
-      borderRadius: radius.lg,
-      padding: spacing.md,
-      marginBottom: spacing.sm,
-      ...shadow.soft,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
     },
     avatar: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       backgroundColor: colors.tintPrimary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -477,10 +484,18 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       ...typography.caption,
       color: colors.textMuted,
     },
+    rowTimeUnread: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
     rowPreview: {
       ...typography.caption,
       color: colors.textSecondary,
       marginTop: 2,
+    },
+    rowPreviewUnread: {
+      color: colors.text,
+      fontWeight: '600',
     },
     badge: {
       minWidth: 22,
