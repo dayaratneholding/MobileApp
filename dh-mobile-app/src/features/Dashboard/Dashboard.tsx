@@ -32,6 +32,7 @@ import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScree
 import { PayslipScreen } from '../payslip/PayslipScreen';
 import { ViewAttendanceScreen } from '../attendance/ViewAttendanceScreen';
 import { ChatHomeScreen } from '../chat/ChatHomeScreen';
+import { FaceCheckInScreen } from '../face/FaceCheckInScreen';
 
 type Props = {
   session: AuthSession;
@@ -167,7 +168,7 @@ export function Dashboard({ session, onLogout }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [activeScreen, setActiveScreen] = useState<
-    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines' | 'chat'
+    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines' | 'chat' | 'face'
   >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
@@ -288,6 +289,15 @@ export function Dashboard({ session, onLogout }: Props) {
         accent: colors.primary,
       },
       {
+        key: 'face',
+        title: 'Face Attendance',
+        subtitle: 'Camera check-in with location',
+        value: 'Open',
+        emoji: '🙂',
+        tint: colors.tintSuccess,
+        accent: colors.success,
+      },
+      {
         key: 'attendance',
         title: 'Attendance',
         subtitle: `This month · ${monthLabel}`,
@@ -390,6 +400,15 @@ export function Dashboard({ session, onLogout }: Props) {
 
   if (activeScreen === 'machines') {
     return <MachinesHomeScreen onBack={() => setActiveScreen('main')} />;
+  }
+
+  if (activeScreen === 'face') {
+    return (
+      <FaceCheckInScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
   }
 
   if (activeScreen === 'chat') {
@@ -497,7 +516,9 @@ export function Dashboard({ session, onLogout }: Props) {
                             ? () => setActiveScreen('machines')
                             : w.key === 'chat'
                               ? () => setActiveScreen('chat')
-                              : undefined
+                              : w.key === 'face'
+                                ? () => setActiveScreen('face')
+                                : undefined
                 }
               >
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
@@ -514,6 +535,13 @@ export function Dashboard({ session, onLogout }: Props) {
 
           <Text style={styles.sectionTitle}>Quick links</Text>
           <View style={styles.linksCard}>
+            <Row
+              styles={styles}
+              emoji="🙂"
+              label="Face Attendance"
+              onPress={() => setActiveScreen('face')}
+            />
+            <Divider styles={styles} />
             <Row
               styles={styles}
               emoji="✅"
