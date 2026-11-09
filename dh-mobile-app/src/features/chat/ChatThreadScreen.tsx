@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
@@ -122,12 +122,19 @@ export function ChatThreadScreen({
   const [error, setError] = useState('');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [keyboardLift, setKeyboardLift] = useState(0);
   const listRef = useRef<FlatList<LocalMessage>>(null);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (event) => {
+      const windowHeight = Dimensions.get('window').height;
+      const overlap = windowHeight - event.endCoordinates.screenY;
+      setKeyboardLift(Math.max(0, overlap));
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardLift(0));
     return () => {
       show.remove();
       hide.remove();
@@ -287,10 +294,7 @@ export function ChatThreadScreen({
   const canSend = Boolean(draft.trim()) && !sending;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.container}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
@@ -312,9 +316,11 @@ export function ChatThreadScreen({
       ) : (
         <FlatList
           ref={listRef}
+          style={styles.messageList}
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
@@ -415,7 +421,15 @@ export function ChatThreadScreen({
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={[styles.composer, keyboardOpen ? styles.composerKeyboard : styles.composerResting]}>
+      <View
+        style={[
+          styles.composer,
+          {
+            marginBottom: keyboardLift,
+            paddingBottom: keyboardLift > 0 ? spacing.sm : spacing.xxl,
+          },
+        ]}
+      >
         <Pressable style={styles.attach} onPress={handleAttach} disabled={sending}>
           <Text style={styles.attachText}>+</Text>
         </Pressable>
@@ -435,7 +449,7 @@ export function ChatThreadScreen({
           <Text style={styles.sendText}>↑</Text>
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -492,6 +506,7 @@ function createStyles(colors: ColorPalette) {
       color: colors.textMuted,
     },
     loader: { marginTop: spacing.xxl },
+    messageList: { flex: 1 },
     messages: {
       paddingHorizontal: spacing.md,
       paddingTop: spacing.md,
@@ -620,17 +635,14 @@ function createStyles(colors: ColorPalette) {
     composer: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: spacing.md,
+      marginHorizontal: spacing.md,
+      marginTop: spacing.sm,
+      paddingHorizontal: spacing.sm,
       paddingTop: spacing.sm,
       backgroundColor: colors.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
-    },
-    composerResting: {
-      paddingBottom: spacing.xxxl,
-    },
-    composerKeyboard: {
-      paddingBottom: spacing.sm,
+      borderRadius: 28,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
     },
     attach: {
       width: 42,

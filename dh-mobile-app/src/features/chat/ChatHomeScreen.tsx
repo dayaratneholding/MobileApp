@@ -382,7 +382,6 @@ export function ChatHomeScreen({ session, onBack }: Props) {
                 />
               }
               contentContainerStyle={groups.length === 0 ? styles.emptyWrap : styles.list}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
               ListEmptyComponent={
                 <View>
                   <Text style={styles.emptyTitle}>No groups yet</Text>
@@ -473,7 +472,10 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     listWrap: { flex: 1 },
     loader: { marginTop: spacing.xxl },
     list: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
       paddingBottom: spacing.xxxl + spacing.lg,
+      gap: spacing.sm,
     },
     emptyWrap: {
       flexGrow: 1,
@@ -492,17 +494,14 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       textAlign: 'center',
       marginTop: spacing.sm,
     },
-    separator: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.border,
-      marginLeft: 76,
-    },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
-      paddingHorizontal: spacing.lg,
+      borderRadius: radius.lg,
+      paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
+      marginBottom: spacing.sm,
     },
     avatar: {
       width: 52,

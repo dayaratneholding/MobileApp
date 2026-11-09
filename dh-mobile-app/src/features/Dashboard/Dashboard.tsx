@@ -23,7 +23,6 @@ import { radius, spacing, typography, type ColorPalette, type ShadowTokens } fro
 import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
-import { GroupMessagePermission, hasPermission } from '../../services/groupPermissions';
 import type { AttendanceSummary } from '../../types/attendance';
 import type { EmployeeLoanListItem } from '../../types/employeeLoan';
 import type { PayrollPeriodItem } from '../../types/payslip';
@@ -178,7 +177,6 @@ export function Dashboard({ session, onLogout }: Props) {
   const [summaryError, setSummaryError] = useState('');
 
   const name = session.userName || session.userID;
-  const canViewMessages = hasPermission(session.permissionIds, GroupMessagePermission.view);
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     day: 'numeric',
@@ -482,9 +480,7 @@ export function Dashboard({ session, onLogout }: Props) {
 
           <Text style={styles.sectionTitle}>Services</Text>
           <View style={styles.grid}>
-            {widgets
-              .filter((w) => w.key !== 'chat' || canViewMessages)
-              .map((w) => (
+            {widgets.map((w) => (
               <Pressable
                 key={w.key}
                 style={styles.widgetCard}
@@ -552,18 +548,14 @@ export function Dashboard({ session, onLogout }: Props) {
               label="Machines PDF Upload"
               onPress={() => setActiveScreen('machines')}
             />
-            {canViewMessages ? (
-              <>
-                <Divider styles={styles} />
-                <Row
-                  styles={styles}
-                  emoji="💬"
-                  label="Messages"
-                  onPress={() => setActiveScreen('chat')}
-                  last
-                />
-              </>
-            ) : null}
+            <Divider styles={styles} />
+            <Row
+              styles={styles}
+              emoji="💬"
+              label="Messages"
+              onPress={() => setActiveScreen('chat')}
+              last
+            />
           </View>
         </View>
       </ScrollView>

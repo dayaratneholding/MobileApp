@@ -6,24 +6,21 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 import { CHAT_API_URL } from '../config/api';
-import { getAuthToken } from './authToken';
 
 let connection: HubConnection | null = null;
 let connectedKey: string | null = null;
 let starting: Promise<HubConnection> | null = null;
 
 function buildHub(userId: string, comSerialID: number): HubConnection {
-  const token = getAuthToken() ?? '';
   const params = new URLSearchParams({
     userID: userId,
     comSerialID: String(comSerialID),
-    access_token: token,
   });
 
   return new HubConnectionBuilder()
     .withUrl(`${CHAT_API_URL}/hubs/chat?${params.toString()}`, {
-      // React Native WebSocket cannot send an Authorization header.
-      // The hub reads userID, and the API reads access_token from the query.
+      // Keep the login token off this URL. A long token makes negotiate return HTTP 414.
+      // The hub reads userID and comSerialID from the query.
       transport: HttpTransportType.WebSockets,
     })
     .withAutomaticReconnect()
