@@ -30,6 +30,11 @@ import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { GroupSummary } from '../../types/chat';
 import { ensureChatHub, stopChatHub } from '../../services/chatHub';
+import {
+  GroupMemberPermission,
+  GroupMessagePermission,
+  hasPermission,
+} from '../../services/groupPermissions';
 import { formatChatTime, messagePreview, parseChatMessage } from './chatModel';
 import { ChatThreadScreen } from './ChatThreadScreen';
 
@@ -58,6 +63,18 @@ export function ChatHomeScreen({ session, onBack }: Props) {
   const [creating, setCreating] = useState(false);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selected?.id ?? null;
+  const canAddGroup = hasPermission(session.permissionIds, GroupMessagePermission.add);
+  const canSaveGroup = hasPermission(session.permissionIds, GroupMessagePermission.save);
+  const canDeleteMessage = hasPermission(session.permissionIds, GroupMessagePermission.delete);
+  const canViewMembers = hasPermission(session.permissionIds, GroupMemberPermission.view);
+  const canAddMember = hasPermission(session.permissionIds, GroupMemberPermission.add);
+  const canEditMember = hasPermission(session.permissionIds, GroupMemberPermission.edit);
+  const canSaveMembers = hasPermission(session.permissionIds, GroupMemberPermission.save);
+  const canDeleteMember = hasPermission(session.permissionIds, GroupMemberPermission.delete);
+  const canOpenCreate = canAddGroup || canSaveGroup;
+  const showMembers = canViewMembers || canAddMember || canEditMember;
+  const canPickMember = canAddMember || canEditMember;
+  const canRemoveMember = canDeleteMember || canEditMember;
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -125,7 +142,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
   }, [session.userID, session.comSerialID]);
 
   useEffect(() => {
-    if (screen !== 'create') return;
+    if (screen !== 'create' || !showMembers) return;
 
     let active = true;
     setUsersLoading(true);
@@ -143,7 +160,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
     return () => {
       active = false;
     };
-  }, [screen]);
+  }, [screen, showMembers]);
 
   const filteredUsers = users
     .filter((user) => user.userID.toLowerCase() !== session.userID.trim().toLowerCase())
@@ -161,14 +178,21 @@ export function ChatHomeScreen({ session, onBack }: Props) {
       const exists = current.some(
         (item) => item.userID.toLowerCase() === user.userID.toLowerCase(),
       );
-      return exists
-        ? current.filter((item) => item.userID.toLowerCase() !== user.userID.toLowerCase())
-        : [...current, user];
+      if (exists) {
+        if (!canRemoveMember) return current;
+        return current.filter((item) => item.userID.toLowerCase() !== user.userID.toLowerCase());
+      }
+      if (!canPickMember) return current;
+      return [...current, user];
     });
   };
 
   const handleCreate = async () => {
     const groupName = name.trim();
+    if (!canSaveGroup) {
+      setError('You do not have permission to save a group.');
+      return;
+    }
     if (!groupName) {
       setError('Enter a group name.');
       return;
@@ -177,9 +201,11 @@ export function ChatHomeScreen({ session, onBack }: Props) {
     setCreating(true);
     setError('');
     try {
-      const memberIds = selectedUsers
-        .map((user) => user.userID.trim())
-        .filter((userID) => userID.length > 0);
+      const memberIds = canSaveMembers
+        ? selectedUsers
+            .map((user) => user.userID.trim())
+            .filter((userID) => userID.length > 0)
+        : [];
       const created = await createGroup(groupName, memberIds);
       setName('');
       setUserQuery('');
@@ -200,6 +226,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
         group={selected}
         currentUserId={session.userID}
         comSerialID={session.comSerialID}
+        canDeleteMessages={canDeleteMessage}
         onBack={() => {
           setSelected(null);
           load(true);
@@ -225,7 +252,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
           >
             <Text style={styles.backText}>← Back</Text>
           </Pressable>
-          {screen === 'list' ? (
+          {screen === 'list' && canOpenCreate ? (
             <Pressable style={styles.newBtn} onPress={() => setScreen('create')} hitSlop={8}>
               <Text style={styles.newText}>New group</Text>
             </Pressable>
@@ -234,7 +261,9 @@ export function ChatHomeScreen({ session, onBack }: Props) {
         <Text style={styles.headerTitle}>{screen === 'create' ? 'New group' : 'Messages'}</Text>
         <Text style={styles.headerSubtitle}>
           {screen === 'create'
-            ? 'Search people and add them to the group'
+            ? showMembers
+              ? 'Search people and add them to the group'
+              : 'Name the group'
             : 'Groups you belong to'}
         </Text>
       </LinearGradient>
@@ -248,71 +277,90 @@ export function ChatHomeScreen({ session, onBack }: Props) {
               onChangeText={setName}
               placeholder="Site team"
             />
-            <TextField
-              label="Add members"
-              value={userQuery}
-              onChangeText={setUserQuery}
-              placeholder="Search by name or user id"
-              autoCapitalize="none"
-            />
-            {selectedUsers.length > 0 ? (
-              <View style={styles.chips}>
-                {selectedUsers.map((user) => (
-                  <Pressable
-                    key={user.userID}
-                    style={styles.chip}
-                    onPress={() => toggleUser(user)}
-                  >
-                    <Text style={styles.chipText}>{user.userName}</Text>
-                    <Text style={styles.chipRemove}>×</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-            {users.length > 0 ? (
-              <Text style={styles.userCount}>
-                {filteredUsers.length} of {users.length} people
-              </Text>
-            ) : null}
-            <ScrollView style={styles.userList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-              {usersLoading ? (
-                <ActivityIndicator color={colors.primary} style={styles.userEmpty} />
-              ) : filteredUsers.length === 0 ? (
-                <Text style={styles.userEmpty}>
-                  {users.length === 0
-                    ? 'No people were returned.'
-                    : 'No people match that search.'}
-                </Text>
-              ) : (
-                filteredUsers.map((user) => {
-                  const picked = selectedUsers.some(
-                    (item) => item.userID.toLowerCase() === user.userID.toLowerCase(),
-                  );
-                  return (
-                    <Pressable
-                      key={user.userID}
-                      style={[styles.userRow, picked && styles.userRowPicked]}
-                      onPress={() => toggleUser(user)}
-                    >
-                      <View style={styles.userBody}>
-                        <Text style={styles.userName}>{user.userName}</Text>
-                        <Text style={styles.userId}>{user.userID}</Text>
-                      </View>
-                      <Text style={styles.userMark}>{picked ? 'Added' : 'Add'}</Text>
-                    </Pressable>
-                  );
-                })
-              )}
-            </ScrollView>
+            {showMembers ? (
+              <>
+                <TextField
+                  label="Add members"
+                  value={userQuery}
+                  onChangeText={setUserQuery}
+                  placeholder="Search by name or user id"
+                  autoCapitalize="none"
+                  editable={canPickMember}
+                />
+                {selectedUsers.length > 0 ? (
+                  <View style={styles.chips}>
+                    {selectedUsers.map((user) => (
+                      <Pressable
+                        key={user.userID}
+                        style={styles.chip}
+                        onPress={() => toggleUser(user)}
+                        disabled={!canRemoveMember}
+                      >
+                        <Text style={styles.chipText}>{user.userName}</Text>
+                        {canRemoveMember ? <Text style={styles.chipRemove}>×</Text> : null}
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                {!canSaveMembers ? (
+                  <Text style={styles.userCount}>You can view people, but saving members is not allowed.</Text>
+                ) : null}
+                {users.length > 0 ? (
+                  <Text style={styles.userCount}>
+                    {filteredUsers.length} of {users.length} people
+                  </Text>
+                ) : null}
+                <ScrollView style={styles.userList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {usersLoading ? (
+                    <ActivityIndicator color={colors.primary} style={styles.userEmpty} />
+                  ) : filteredUsers.length === 0 ? (
+                    <Text style={styles.userEmpty}>
+                      {users.length === 0
+                        ? 'No people were returned.'
+                        : 'No people match that search.'}
+                    </Text>
+                  ) : (
+                    filteredUsers.map((user) => {
+                      const picked = selectedUsers.some(
+                        (item) => item.userID.toLowerCase() === user.userID.toLowerCase(),
+                      );
+                      const canToggle = picked ? canRemoveMember : canPickMember;
+                      return (
+                        <Pressable
+                          key={user.userID}
+                          style={[styles.userRow, picked && styles.userRowPicked]}
+                          onPress={() => toggleUser(user)}
+                          disabled={!canToggle}
+                        >
+                          <View style={styles.userBody}>
+                            <Text style={styles.userName}>{user.userName}</Text>
+                            <Text style={styles.userId}>{user.userID}</Text>
+                          </View>
+                          {canToggle ? (
+                            <Text style={styles.userMark}>{picked ? 'Added' : 'Add'}</Text>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })
+                  )}
+                </ScrollView>
+              </>
+            ) : (
+              <Text style={styles.userCount}>You do not have permission to add members.</Text>
+            )}
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
           <View style={styles.formFooter}>
-            <Button
-              label={creating ? 'Creating…' : 'Create group'}
-              onPress={handleCreate}
-              disabled={creating}
-              loading={creating}
-            />
+            {canSaveGroup ? (
+              <Button
+                label={creating ? 'Creating…' : 'Create group'}
+                onPress={handleCreate}
+                disabled={creating}
+                loading={creating}
+              />
+            ) : (
+              <Text style={styles.userCount}>You do not have permission to save a group.</Text>
+            )}
           </View>
         </View>
       ) : (
@@ -355,9 +403,14 @@ export function ChatHomeScreen({ session, onBack }: Props) {
                       <Text style={styles.rowTitle} numberOfLines={1}>
                         {item.name || 'Group'}
                       </Text>
-                      <Text style={styles.rowTime}>{formatChatTime(item.lastMessageAt)}</Text>
+                      <Text style={[styles.rowTime, item.unreadCount > 0 && styles.rowTimeUnread]}>
+                        {formatChatTime(item.lastMessageAt)}
+                      </Text>
                     </View>
-                    <Text style={styles.rowPreview} numberOfLines={1}>
+                    <Text
+                      style={[styles.rowPreview, item.unreadCount > 0 && styles.rowPreviewUnread]}
+                      numberOfLines={1}
+                    >
                       {item.lastMessage || 'No messages yet'}
                     </Text>
                   </View>
@@ -419,7 +472,8 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     listWrap: { flex: 1 },
     loader: { marginTop: spacing.xxl },
     list: {
-      padding: spacing.lg,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
       paddingBottom: spacing.xxxl + spacing.lg,
       gap: spacing.sm,
     },
@@ -445,14 +499,14 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       alignItems: 'center',
       backgroundColor: colors.surface,
       borderRadius: radius.lg,
-      padding: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
       marginBottom: spacing.sm,
-      ...shadow.soft,
     },
     avatar: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       backgroundColor: colors.tintPrimary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -477,10 +531,18 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       ...typography.caption,
       color: colors.textMuted,
     },
+    rowTimeUnread: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
     rowPreview: {
       ...typography.caption,
       color: colors.textSecondary,
       marginTop: 2,
+    },
+    rowPreviewUnread: {
+      color: colors.text,
+      fontWeight: '600',
     },
     badge: {
       minWidth: 22,

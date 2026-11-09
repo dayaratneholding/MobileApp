@@ -1,3 +1,4 @@
+import { ApiError } from '../client/client';
 import { getHcmJson, postHcmJson, putHcmJson } from '../client/hcmClient';
 import type {
   CreateEmployeeLoanDto,
@@ -124,23 +125,35 @@ function buildPagedQueryAttempts(query: EmployeeLoanQuery): EmployeeLoanQuery[] 
     Filter: query.Filter,
   };
 
-  const attempts: EmployeeLoanQuery[] = [base];
-
-  if (query.status !== undefined) {
-    attempts.push({ ...base, status: query.status });
-  } else {
-    attempts.push({ ...base, status: true });
-    attempts.push({ ...base, status: false });
+  if (query.status === undefined) {
+    return [base];
   }
 
-  return attempts;
+  return [{ ...base, status: query.status }];
+}
+
+function emptyLoanPage(query: EmployeeLoanQuery): EmployeeLoanListPage {
+  return {
+    items: [],
+    currentPage: query.PageNumber ?? 1,
+    totalPages: 1,
+    totalCount: 0,
+    hasNextPage: false,
+  };
 }
 
 async function fetchEmployeeLoanPage(
   query: EmployeeLoanQuery,
 ): Promise<EmployeeLoanListPage> {
-  const result = await getHcmJson<unknown>('/EmployeeLoan/paged', query);
-  return parseEmployeeLoanPage(result);
+  try {
+    const result = await getHcmJson<unknown>('/EmployeeLoan/paged', query);
+    return parseEmployeeLoanPage(result);
+  } catch (error) {
+    if (error instanceof ApiError && error.message === 'Empty response from HCM server.') {
+      return emptyLoanPage(query);
+    }
+    throw error;
+  }
 }
 
 export async function getEmployeeLoanPaged(
@@ -151,13 +164,7 @@ export async function getEmployeeLoanPaged(
   }
 
   const attempts = buildPagedQueryAttempts(query);
-  let lastResult: EmployeeLoanListPage = {
-    items: [],
-    currentPage: query.PageNumber ?? 1,
-    totalPages: 1,
-    totalCount: 0,
-    hasNextPage: false,
-  };
+  let lastResult = emptyLoanPage(query);
 
   for (const attemptQuery of attempts) {
     try {
