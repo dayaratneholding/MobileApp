@@ -186,7 +186,7 @@ export async function uploadFiles(
 
 /** File Manager often returns a path with no host. Android then treats it as an app resource. */
 export function absoluteFileUrl(url: string): string {
-  const trimmed = url.trim();
+  const trimmed = url.trim().replace(/^https?:\/\/2\.24\.130\.171:5000/i, 'https://files.pskerp.com');
   if (!trimmed) return '';
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed;
 

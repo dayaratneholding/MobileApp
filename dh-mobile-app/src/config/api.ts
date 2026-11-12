@@ -21,7 +21,7 @@ export const HCM_API_URL = `https://hcm.pskerp.com/api/v1/hcm`;    // Resolves t
 export const MOBILE_APP_API_URL = `https://hcm.pskerp.com/api/MobileApp`; // Resolves to: https://hcm.prasuking.com/api/v1/MobileApp
 
 /** Same File Manager host used by DHERPCLIENT (itemscreen / asset uploads) */
-export const FILE_MANAGER_API_URL = 'http://2.24.130.171:5000/api/';
+export const FILE_MANAGER_API_URL = 'https://files.pskerp.com/api/';
 
 /** Chat API (REST + SignalR hub at /hubs/chat) */
 export const CHAT_API_URL = 'https://chat.pskerp.com';
