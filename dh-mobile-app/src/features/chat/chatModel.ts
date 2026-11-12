@@ -58,6 +58,57 @@ export function parseChatMessage(raw: unknown): ChatMessage | null {
   };
 }
 
+export function mentionQuery(text: string, cursor: number): string | null {
+  const before = text.slice(0, Math.max(0, cursor));
+  const at = before.lastIndexOf('@');
+  if (at < 0) return null;
+  if (at > 0 && !/\s/.test(before[at - 1])) return null;
+  const query = before.slice(at + 1);
+  if (/[\s@]/.test(query)) return null;
+  return query;
+}
+
+export function splitMentionParts(
+  body: string,
+  names: string[],
+): { text: string; mention: boolean }[] {
+  if (!body) return [];
+  const known = [...new Set(names.map((name) => name.trim()).filter(Boolean))].sort(
+    (left, right) => right.length - left.length,
+  );
+  const parts: { text: string; mention: boolean }[] = [];
+  let index = 0;
+
+  while (index < body.length) {
+    if (body[index] === '@') {
+      const rest = body.slice(index + 1);
+      const named = known.find((name) => {
+        if (!rest.toLowerCase().startsWith(name.toLowerCase())) return false;
+        const after = rest[name.length];
+        return after == null || /[\s.,!?]/.test(after);
+      });
+      if (named) {
+        parts.push({ text: body.slice(index, index + 1 + named.length), mention: true });
+        index += 1 + named.length;
+        continue;
+      }
+      const word = /^[^\s@]+/.exec(rest);
+      if (word) {
+        parts.push({ text: `@${word[0]}`, mention: true });
+        index += 1 + word[0].length;
+        continue;
+      }
+    }
+
+    const next = body.indexOf('@', index + 1);
+    const end = next === -1 ? body.length : next;
+    parts.push({ text: body.slice(index, end), mention: false });
+    index = end;
+  }
+
+  return parts;
+}
+
 export function messagePreview(message: ChatMessage): string {
   if (message.deletedAt) return 'Message deleted';
   if (message.type === 'Text') return message.body?.trim() || 'Message';

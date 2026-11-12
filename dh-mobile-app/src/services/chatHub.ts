@@ -17,7 +17,7 @@ function buildHub(userId: string, comSerialID: number): HubConnection {
     comSerialID: String(comSerialID),
   });
 
-  return new HubConnectionBuilder()
+  const hub = new HubConnectionBuilder()
     .withUrl(`${CHAT_API_URL}/hubs/chat?${params.toString()}`, {
       // Keep the login token off this URL. A long token makes negotiate return HTTP 414.
       // The hub reads userID and comSerialID from the query.
@@ -28,6 +28,11 @@ function buildHub(userId: string, comSerialID: number): HubConnection {
     .withAutomaticReconnect()
     .configureLogging(__DEV__ ? LogLevel.Information : LogLevel.Error)
     .build();
+
+  // The server tells the client when someone reads a message. The screen
+  // does not show read receipts, but the hub still expects this method.
+  hub.on('messageRead', () => undefined);
+  return hub;
 }
 
 export async function ensureChatHub(userId: string, comSerialID: number): Promise<HubConnection> {

@@ -184,6 +184,17 @@ export async function uploadFiles(
   return result;
 }
 
+/** File Manager often returns a path with no host. Android then treats it as an app resource. */
+export function absoluteFileUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed;
+
+  const origin = FILE_MANAGER_API_URL.replace(/\/api\/?$/i, '');
+  if (trimmed.startsWith('/')) return `${origin}${trimmed}`;
+  return `${FILE_MANAGER_API_URL}${trimmed.replace(/^\/+/, '')}`;
+}
+
 function safeFileName(name: string): string {
   const cleaned = name.replace(/[\\/:*?"<>|]/g, '_').trim();
   return cleaned || 'file';
@@ -203,6 +214,14 @@ function mimeForName(name: string): string {
 
 /** Download a chat attachment and open the phone save/share sheet. */
 export async function downloadSharedFile(url: string, fileName: string): Promise<void> {
+  const absolute = absoluteFileUrl(url);
+  if (!absolute) {
+    throw new ApiError('This file has no download link.');
+  }
+  if (!FileSystem.cacheDirectory) {
+    throw new ApiError('This phone has no place to save the file.');
+  }
+
   const name = safeFileName(fileName);
   const destination = `${FileSystem.cacheDirectory}${Date.now()}-${name}`;
   const token = getAuthToken();
@@ -211,7 +230,13 @@ export async function downloadSharedFile(url: string, fileName: string): Promise
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const result = await FileSystem.downloadAsync(url, destination, { headers });
+  let result: FileSystem.FileSystemDownloadResult;
+  try {
+    result = await FileSystem.downloadAsync(absolute, destination, { headers });
+  } catch (err) {
+    logFm('download', { url: absolute, error: String(err) });
+    throw new ApiError('The phone could not download this file.');
+  }
   if (result.status < 200 || result.status >= 300) {
     throw new ApiError(`Download failed (${result.status}).`);
   }

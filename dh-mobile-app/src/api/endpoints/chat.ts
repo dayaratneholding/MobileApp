@@ -12,6 +12,56 @@ export function createGroup(name: string, memberUserIds: string[]): Promise<Grou
   });
 }
 
+export type GroupMember = {
+  userID: string;
+  userName: string;
+};
+
+function readMemberText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '';
+}
+
+function parseGroupMembers(body: unknown): GroupMember[] {
+  const source = Array.isArray(body)
+    ? body
+    : body && typeof body === 'object'
+      ? ((body as { members?: unknown; data?: unknown; items?: unknown }).members ??
+        (body as { data?: unknown }).data ??
+        (body as { items?: unknown }).items)
+      : null;
+  if (!Array.isArray(source)) return [];
+
+  const members: GroupMember[] = [];
+  for (const item of source) {
+    if (typeof item === 'string' && item.trim()) {
+      members.push({ userID: item.trim(), userName: item.trim() });
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const userID = readMemberText(
+      record.userID ?? record.UserID ?? record.userId ?? record.UserId ?? record.id ?? record.Id,
+    );
+    if (!userID) continue;
+    const userName = readMemberText(
+      record.userName ?? record.UserName ?? record.name ?? record.Name,
+    );
+    members.push({ userID, userName: userName || userID });
+  }
+  return members;
+}
+
+export async function listGroupMembers(groupId: string): Promise<GroupMember[]> {
+  try {
+    const body = await chatRequest<unknown>(`/groups/${groupId}/members`);
+    return parseGroupMembers(body);
+  } catch {
+    return [];
+  }
+}
+
 export function addGroupMember(groupId: string, userId: string): Promise<void> {
   return chatRequest<void>(`/groups/${groupId}/members`, {
     method: 'POST',

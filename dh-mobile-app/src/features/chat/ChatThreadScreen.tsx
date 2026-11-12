@@ -7,6 +7,7 @@ import {
   Keyboard,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,14 +17,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import type { HubConnection } from '@microsoft/signalr';
-import { createFolder, downloadSharedFile, uploadFiles } from '../../api/client/fileManagerClient';
+import {
+  absoluteFileUrl,
+  createFolder,
+  downloadSharedFile,
+  uploadFiles,
+} from '../../api/client/fileManagerClient';
 import { getApiErrorMessage } from '../../api/client/client';
 import {
   deleteMessage,
+  listGroupMembers,
   listMessages,
   markGroupRead,
   sendMessage,
+  type GroupMember,
 } from '../../api/endpoints/chat';
+import { getAllUsers } from '../../api/endpoints/users';
 import { ensureChatHub } from '../../services/chatHub';
 import {
   radius,
@@ -37,10 +46,12 @@ import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { ChatMessage, GroupSummary, MessageType } from '../../types/chat';
 import {
   createMessageId,
+  mentionQuery,
   messagePreview,
   parseChatInstant,
   parseChatMessage,
   sortMessages,
+  splitMentionParts,
   upsertMessage,
 } from './chatModel';
 
@@ -103,6 +114,47 @@ function clockTime(value: string): string {
   return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+function readPage(body: unknown): LocalMessage[] {
+  if (!Array.isArray(body)) return [];
+  return body
+    .map((item) => parseChatMessage(item))
+    .filter((item): item is LocalMessage => Boolean(item));
+}
+
+/** The chat API returns only the newest page. Keep asking until yesterday is included. */
+async function loadGroupHistory(groupId: string): Promise<{ messages: LocalMessage[]; hasMore: boolean }> {
+  const seen = new Set<string>();
+  const collected: LocalMessage[] = [];
+  let before: string | undefined;
+  let hasMore = false;
+  const startOfYesterday = new Date();
+  startOfYesterday.setHours(0, 0, 0, 0);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+  for (let page = 0; page < 8; page += 1) {
+    const batch = readPage(await listMessages(groupId, before, 50));
+    const fresh = batch.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    if (fresh.length === 0) return { messages: sortMessages(collected), hasMore: false };
+
+    collected.push(...fresh);
+    const sorted = sortMessages(collected);
+    const oldest = sorted[0];
+    const oldestAt = parseChatInstant(oldest?.createdAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+    hasMore = fresh.length >= 50;
+    const cursor = oldest?.createdAt?.trim().replace(' ', 'T');
+    if (!hasMore || oldestAt < startOfYesterday.getTime() || !cursor || cursor === before) {
+      return { messages: sorted, hasMore: hasMore && cursor !== before };
+    }
+    before = cursor;
+  }
+
+  return { messages: sortMessages(collected), hasMore };
+}
+
 function attachmentLabel(type: MessageType): string {
   if (type === 'Image') return 'Photo';
   if (type === 'Audio') return 'Audio';
@@ -125,8 +177,18 @@ export function ChatThreadScreen({
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [members, setMembers] = useState<GroupMember[]>([]);
+  const [nameById, setNameById] = useState<Record<string, string>>({});
+  const [cursor, setCursor] = useState(0);
   const [keyboardLift, setKeyboardLift] = useState(0);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const listRef = useRef<FlatList<LocalMessage>>(null);
+  const stickToEnd = useRef(true);
+  const hasMore = useRef(false);
+  const loadingOlder = useRef(false);
+  const oldestAt = useRef<string | null>(null);
+  const messagesRef = useRef<LocalMessage[]>([]);
+  messagesRef.current = messages;
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -154,10 +216,12 @@ export function ChatThreadScreen({
   const load = useCallback(async () => {
     setError('');
     try {
-      const result = await listMessages(group.id);
-      const sorted = sortMessages(result ?? []);
-      setMessages(sorted);
-      const latest = sorted[sorted.length - 1];
+      const history = await loadGroupHistory(group.id);
+      stickToEnd.current = true;
+      hasMore.current = history.hasMore;
+      oldestAt.current = history.messages[0]?.createdAt?.trim().replace(' ', 'T') ?? null;
+      setMessages(history.messages);
+      const latest = history.messages[history.messages.length - 1];
       if (latest) {
         markGroupRead(group.id, latest.id).catch(() => undefined);
       }
@@ -168,9 +232,59 @@ export function ChatThreadScreen({
     }
   }, [group.id]);
 
+  const loadOlder = useCallback(async () => {
+    const before = oldestAt.current;
+    if (!before || loadingOlder.current || !hasMore.current) return;
+    loadingOlder.current = true;
+    stickToEnd.current = false;
+    setLoadingEarlier(true);
+    try {
+      const batch = readPage(await listMessages(group.id, before, 50));
+      const ids = new Set(messagesRef.current.map((item) => item.id));
+      const fresh = batch.filter((item) => item.id && !ids.has(item.id));
+      if (fresh.length === 0 || fresh.length < 50) {
+        hasMore.current = false;
+      }
+      if (fresh.length === 0) return;
+      const sorted = sortMessages([...fresh, ...messagesRef.current]);
+      const nextOldest = sorted[0]?.createdAt?.trim().replace(' ', 'T') || before;
+      if (nextOldest === before) hasMore.current = false;
+      oldestAt.current = nextOldest;
+      setMessages(sorted);
+    } catch {
+      // Keep the messages already on screen.
+    } finally {
+      loadingOlder.current = false;
+      setLoadingEarlier(false);
+    }
+  }, [group.id]);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([listGroupMembers(group.id), getAllUsers().catch(() => [])])
+      .then(([listed, users]) => {
+        if (!active) return;
+        const byId = new Map(users.map((user) => [user.userID.toLowerCase(), user.userName || user.userID]));
+        setNameById(Object.fromEntries(byId));
+        const merged = new Map<string, GroupMember>();
+        for (const member of listed) {
+          const key = member.userID.toLowerCase();
+          merged.set(key, {
+            userID: member.userID,
+            userName: byId.get(key) || member.userName || member.userID,
+          });
+        }
+        setMembers([...merged.values()]);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [group.id]);
 
   useEffect(() => {
     let hub: HubConnection | null = null;
@@ -230,6 +344,7 @@ export function ChatThreadScreen({
   const handleSend = async () => {
     const body = draft.trim();
     if (!body || sending) return;
+    stickToEnd.current = true;
     setDraft('');
     await publish({ id: createMessageId(), type: 'Text', body });
   };
@@ -244,6 +359,7 @@ export function ChatThreadScreen({
 
     const file = picked.assets[0];
     const mime = file.mimeType || 'application/octet-stream';
+    stickToEnd.current = true;
     setSending(true);
     try {
       const folder = `chat/${group.id}`;
@@ -252,7 +368,7 @@ export function ChatThreadScreen({
         { uri: file.uri, name: file.name, type: mime },
       ]);
       const saved = uploaded.uploaded?.[0];
-      const fileUrl = saved?.downloadUrl || saved?.viewUrl;
+      const fileUrl = absoluteFileUrl(saved?.downloadUrl || saved?.viewUrl || '');
       if (!fileUrl) {
         throw new Error('The file uploaded, but no download link was returned.');
       }
@@ -306,6 +422,48 @@ export function ChatThreadScreen({
     ]);
   };
 
+  const mentionPeople = (() => {
+    const byId = new Map<string, GroupMember>();
+    for (const member of members) {
+      if (!member.userID || isMine(member.userID, currentUserId)) continue;
+      byId.set(member.userID.toLowerCase(), member);
+    }
+    for (const message of messages) {
+      if (!message.senderId || isMine(message.senderId, currentUserId)) continue;
+      const key = message.senderId.toLowerCase();
+      if (byId.has(key)) continue;
+      byId.set(key, {
+        userID: message.senderId,
+        userName: nameById[key] || message.senderId,
+      });
+    }
+    return [...byId.values()];
+  })();
+  const activeMention = mentionQuery(draft, cursor);
+  const suggestions =
+    activeMention === null
+      ? []
+      : mentionPeople
+          .filter((person) => {
+            const needle = activeMention.toLowerCase();
+            return (
+              person.userName.toLowerCase().includes(needle) ||
+              person.userID.toLowerCase().includes(needle)
+            );
+          })
+          .slice(0, 8);
+  const mentionNames = mentionPeople.flatMap((person) => [person.userName, person.userID]);
+
+  const insertMention = (person: GroupMember) => {
+    const before = draft.slice(0, cursor);
+    const at = before.lastIndexOf('@');
+    if (at < 0) return;
+    const name = person.userName.trim() || person.userID;
+    const next = `${draft.slice(0, at)}@${name} ${draft.slice(cursor)}`;
+    setDraft(next);
+    setCursor(at + name.length + 2);
+  };
+
   const initial = (group.name || 'G').slice(0, 1).toUpperCase();
   const canSend = Boolean(draft.trim()) && !sending;
 
@@ -345,7 +503,23 @@ export function ChatThreadScreen({
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
+          scrollEventThrottle={200}
+          onScroll={(event) => {
+            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+            const distanceFromEnd =
+              contentSize.height - layoutMeasurement.height - contentOffset.y;
+            stickToEnd.current = distanceFromEnd < 80;
+            if (contentOffset.y < 48) loadOlder();
+          }}
+          onContentSizeChange={() => {
+            if (stickToEnd.current) listRef.current?.scrollToEnd({ animated: false });
+          }}
+          ListHeaderComponent={
+            loadingEarlier ? (
+              <ActivityIndicator color={colors.primary} style={styles.earlier} />
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <View style={styles.emptyMark}>
@@ -426,7 +600,20 @@ export function ChatThreadScreen({
                       </View>
                     ) : (
                       <Text style={[styles.bubbleText, mine ? styles.mineText : styles.theirText, deleted && styles.deletedText]}>
-                        {deleted ? 'Message deleted' : messagePreview(item)}
+                        {deleted
+                          ? 'Message deleted'
+                          : splitMentionParts(messagePreview(item), mentionNames).map((part, partIndex) =>
+                              part.mention ? (
+                                <Text
+                                  key={`${item.id}-m-${partIndex}`}
+                                  style={mine ? styles.mineMention : styles.theirMention}
+                                >
+                                  {part.text}
+                                </Text>
+                              ) : (
+                                part.text
+                              ),
+                            )}
                       </Text>
                     )}
                     <Text style={[styles.time, mine ? styles.mineTime : styles.theirTime]}>
@@ -448,6 +635,35 @@ export function ChatThreadScreen({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
 
+      {activeMention !== null ? (
+        <View style={styles.mentionCard}>
+          <Text style={styles.mentionTitle}>Mention a member</Text>
+          {suggestions.length === 0 ? (
+            <Text style={styles.mentionEmpty}>No matching member in this group.</Text>
+          ) : (
+            <ScrollView keyboardShouldPersistTaps="handled" style={styles.mentionList}>
+              {suggestions.map((person) => (
+                <Pressable
+                  key={person.userID.toLowerCase()}
+                  style={styles.mentionRow}
+                  onPress={() => insertMention(person)}
+                >
+                  <View style={styles.mentionAvatar}>
+                    <Text style={styles.mentionAvatarText}>
+                      {(person.userName || person.userID).slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.mentionBody}>
+                    <Text style={styles.mentionName}>{person.userName}</Text>
+                    <Text style={styles.mentionId}>{person.userID}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      ) : null}
+
       <View
         style={[
           styles.composer,
@@ -463,8 +679,12 @@ export function ChatThreadScreen({
         <TextInput
           style={styles.input}
           value={draft}
-          onChangeText={setDraft}
-          placeholder="Message"
+          onChangeText={(text) => {
+            setDraft(text);
+            setCursor(text.length);
+          }}
+          onSelectionChange={(event) => setCursor(event.nativeEvent.selection.end)}
+          placeholder="Message, @ to mention"
           placeholderTextColor={colors.textMuted}
           multiline
         />
@@ -545,6 +765,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       ...shadow.card,
     },
     loader: { marginTop: spacing.xxl },
+    earlier: { marginVertical: spacing.sm },
     messageList: { flex: 1 },
     messages: {
       paddingHorizontal: spacing.md,
@@ -629,6 +850,14 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     deletedText: { fontStyle: 'italic' },
     mineText: { color: colors.textOnPrimary },
     theirText: { color: colors.text },
+    mineMention: {
+      color: colors.textOnPrimary,
+      fontWeight: '800',
+    },
+    theirMention: {
+      color: colors.primary,
+      fontWeight: '800',
+    },
     time: {
       fontSize: 11,
       lineHeight: 14,
@@ -664,6 +893,61 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       fontSize: 11,
       lineHeight: 14,
       marginTop: 1,
+    },
+    mentionCard: {
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+      ...shadow.soft,
+    },
+    mentionTitle: {
+      ...typography.caption,
+      color: colors.textMuted,
+      fontWeight: '700',
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+    },
+    mentionList: {
+      maxHeight: 180,
+    },
+    mentionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    mentionAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.tintPrimary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: spacing.sm,
+    },
+    mentionAvatarText: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    mentionBody: { flex: 1 },
+    mentionName: {
+      ...typography.label,
+      color: colors.text,
+    },
+    mentionId: {
+      ...typography.caption,
+      color: colors.textMuted,
+    },
+    mentionEmpty: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
     },
     error: {
       ...typography.caption,
