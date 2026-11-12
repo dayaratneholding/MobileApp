@@ -67,10 +67,21 @@ export function messagePreview(message: ChatMessage): string {
   return message.fileName || 'File';
 }
 
+const HAS_TIME_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** Chat timestamps are stored in UTC. A value with no offset is still UTC. */
+export function parseChatInstant(value?: string | null): Date | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const utc = HAS_TIME_ZONE.test(trimmed) ? trimmed : `${trimmed.replace(' ', 'T')}Z`;
+  const date = new Date(utc);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatChatTime(value?: string | null): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseChatInstant(value);
+  if (!date) return '';
 
   const now = new Date();
   const sameDay =
@@ -87,7 +98,7 @@ export function formatChatTime(value?: string | null): string {
 
 export function sortMessages(messages: ChatMessage[]): ChatMessage[] {
   return [...messages].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    (a, b) => (parseChatInstant(a.createdAt)?.getTime() ?? 0) - (parseChatInstant(b.createdAt)?.getTime() ?? 0),
   );
 }
 

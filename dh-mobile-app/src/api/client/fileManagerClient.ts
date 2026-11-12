@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { FILE_MANAGER_API_URL } from '../../config/api';
 import { getAuthToken } from '../../services/authToken';
 import { ApiError } from './client';
@@ -180,4 +182,47 @@ export async function uploadFiles(
   }
 
   return result;
+}
+
+function safeFileName(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]/g, '_').trim();
+  return cleaned || 'file';
+}
+
+function mimeForName(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'mp4') return 'video/mp4';
+  if (ext === 'mp3' || ext === 'm4a') return 'audio/mpeg';
+  return 'application/octet-stream';
+}
+
+/** Download a chat attachment and open the phone save/share sheet. */
+export async function downloadSharedFile(url: string, fileName: string): Promise<void> {
+  const name = safeFileName(fileName);
+  const destination = `${FileSystem.cacheDirectory}${Date.now()}-${name}`;
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const result = await FileSystem.downloadAsync(url, destination, { headers });
+  if (result.status < 200 || result.status >= 300) {
+    throw new ApiError(`Download failed (${result.status}).`);
+  }
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (!canShare) {
+    throw new ApiError('Saving files is not available on this phone.');
+  }
+
+  await Sharing.shareAsync(result.uri, {
+    mimeType: mimeForName(name),
+    dialogTitle: 'Save file',
+  });
 }

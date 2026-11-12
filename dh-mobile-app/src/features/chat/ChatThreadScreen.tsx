@@ -5,7 +5,6 @@ import {
   Dimensions,
   FlatList,
   Keyboard,
-  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import type { HubConnection } from '@microsoft/signalr';
-import { createFolder, uploadFiles } from '../../api/client/fileManagerClient';
+import { createFolder, downloadSharedFile, uploadFiles } from '../../api/client/fileManagerClient';
 import { getApiErrorMessage } from '../../api/client/client';
 import {
   deleteMessage,
@@ -39,6 +38,7 @@ import type { ChatMessage, GroupSummary, MessageType } from '../../types/chat';
 import {
   createMessageId,
   messagePreview,
+  parseChatInstant,
   parseChatMessage,
   sortMessages,
   upsertMessage,
@@ -78,14 +78,14 @@ function senderColor(userId: string): string {
 }
 
 function dayKey(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseChatInstant(value);
+  if (!date) return '';
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
 function dayLabel(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseChatInstant(value);
+  if (!date) return '';
   const start = (item: Date) => new Date(item.getFullYear(), item.getMonth(), item.getDate()).getTime();
   const days = Math.round((start(new Date()) - start(date)) / 86400000);
   if (days === 0) return 'Today';
@@ -98,8 +98,8 @@ function dayLabel(value: string): string {
 }
 
 function clockTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseChatInstant(value);
+  if (!date) return '';
   return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
@@ -124,6 +124,7 @@ export function ChatThreadScreen({
   const [error, setError] = useState('');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [keyboardLift, setKeyboardLift] = useState(0);
   const listRef = useRef<FlatList<LocalMessage>>(null);
 
@@ -251,20 +252,33 @@ export function ChatThreadScreen({
         { uri: file.uri, name: file.name, type: mime },
       ]);
       const saved = uploaded.uploaded?.[0];
-      if (!saved?.viewUrl) {
-        throw new Error('The file uploaded, but no link was returned.');
+      const fileUrl = saved?.downloadUrl || saved?.viewUrl;
+      if (!fileUrl) {
+        throw new Error('The file uploaded, but no download link was returned.');
       }
       await publish({
         id: createMessageId(),
         type: typeForMime(mime),
         body: null,
-        fileUrl: saved.viewUrl,
+        fileUrl,
         fileName: file.name,
         size: file.size ?? saved.sizeBytes,
       });
     } catch (err) {
       Alert.alert('File not shared', getApiErrorMessage(err));
       setSending(false);
+    }
+  };
+
+  const handleDownload = async (message: LocalMessage) => {
+    if (!message.fileUrl || downloadingId) return;
+    setDownloadingId(message.id);
+    try {
+      await downloadSharedFile(message.fileUrl, message.fileName || 'file');
+    } catch (err) {
+      Alert.alert('Could not download', getApiErrorMessage(err));
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -367,7 +381,7 @@ export function ChatThreadScreen({
                 <Pressable
                   onLongPress={() => handleDelete(item)}
                   onPress={() => {
-                    if (item.fileUrl && !deleted) Linking.openURL(item.fileUrl).catch(() => undefined);
+                    if (item.fileUrl && !deleted) handleDownload(item);
                   }}
                   style={[
                     styles.bubbleWrap,
@@ -404,7 +418,9 @@ export function ChatThreadScreen({
                             {item.fileName || messagePreview(item)}
                           </Text>
                           <Text style={[styles.fileHint, mine ? styles.mineTime : styles.theirTime]}>
-                            {attachmentLabel(item.type)} · Tap to open
+                            {downloadingId === item.id
+                              ? 'Downloading…'
+                              : `${attachmentLabel(item.type)} · Tap to download`}
                           </Text>
                         </View>
                       </View>
