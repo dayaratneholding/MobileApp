@@ -2,7 +2,7 @@
   "expo": {
     "name": "DH Mobile App",
     "slug": "dh-mobile-app",
-    "version": "1.0.1",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "app.pskerp.com",
-      "versionCode": 2,
+      "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -55,7 +55,8 @@
         {
           "locationWhenInUsePermission": "Allow DH Mobile App to save your location with attendance."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "eas": {

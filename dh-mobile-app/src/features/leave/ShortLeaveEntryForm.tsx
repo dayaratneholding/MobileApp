@@ -14,6 +14,7 @@ import {
 } from '../../api/endpoints/shortLeave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
+import { DateField } from '../../components/forms/DateField';
 import { OptionPicker } from '../../components/forms/OptionPicker';
 import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
@@ -155,12 +156,7 @@ export function ShortLeaveEntryForm({
 
           <View style={styles.body}>
             <View style={styles.card}>
-              <TextField
-                label="Date"
-                placeholder="YYYY-MM-DD"
-                value={date}
-                onChangeText={setDate}
-              />
+              <DateField label="Date" value={date} onChange={setDate} />
 
               <OptionPicker
                 label="Slot"

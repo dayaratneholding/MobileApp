@@ -1,12 +1,20 @@
-# Keep EAS upload lean
 node_modules/
 .expo/
-.expo-tmp-check/
-.git/
-docs/
-tests/
+dist/
+web-build/
+builds/
 *.aab
 *.apk
+PLAY-UPLOAD-AFTER-48H/
+/ios
+/android
+*.jks
+credentials.json
+credentials/
+keystore-info.txt
+*.pem
+swagger.json
 hcm-swagger.json
 hcm-swagger-live.json
-swagger.json
+npm-debug.*
+.DS_Store

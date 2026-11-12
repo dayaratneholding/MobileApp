@@ -21,7 +21,9 @@ function buildHub(userId: string, comSerialID: number): HubConnection {
     .withUrl(`${CHAT_API_URL}/hubs/chat?${params.toString()}`, {
       // Keep the login token off this URL. A long token makes negotiate return HTTP 414.
       // The hub reads userID and comSerialID from the query.
-      transport: HttpTransportType.WebSockets,
+      // chat.pskerp.com is behind Cloudflare. Negotiate succeeds, then the
+      // WebSocket upgrade is dropped. Long polling reaches the same hub.
+      transport: HttpTransportType.LongPolling,
     })
     .withAutomaticReconnect()
     .configureLogging(__DEV__ ? LogLevel.Information : LogLevel.Error)

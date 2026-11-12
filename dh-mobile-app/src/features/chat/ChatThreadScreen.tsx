@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import type { HubConnection } from '@microsoft/signalr';
@@ -28,6 +29,7 @@ import { ensureChatHub } from '../../services/chatHub';
 import {
   radius,
   spacing,
+  type ShadowTokens,
   typography,
   type ColorPalette,
 } from '../../styles/theme';
@@ -295,22 +297,30 @@ export function ChatThreadScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
-      <View style={styles.header}>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={[colors.gradientStart, colors.gradientEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
-          <Text style={styles.backText}>‹</Text>
+          <Text style={styles.backText}>← Back</Text>
         </Pressable>
-        <View style={styles.headerAvatar}>
-          <Text style={styles.headerAvatarText}>{initial}</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarText}>{initial}</Text>
+          </View>
+          <View style={styles.headerBody}>
+            <Text style={styles.title} numberOfLines={1}>
+              {group.name || 'Group'}
+            </Text>
+            <Text style={styles.subtitle}>Group chat</Text>
+          </View>
         </View>
-        <View style={styles.headerBody}>
-          <Text style={styles.title} numberOfLines={1}>
-            {group.name || 'Group'}
-          </Text>
-          <Text style={styles.subtitle}>Group chat</Text>
-        </View>
-      </View>
+      </LinearGradient>
 
+      <View style={styles.panel}>
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.loader} />
       ) : (
@@ -420,6 +430,7 @@ export function ChatThreadScreen({
       )}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
 
       <View
         style={[
@@ -453,57 +464,69 @@ export function ChatThreadScreen({
   );
 }
 
-function createStyles(colors: ColorPalette) {
+function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
     header: {
-      paddingTop: spacing.xxxl + spacing.sm,
-      paddingBottom: spacing.md,
-      paddingHorizontal: spacing.md,
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      paddingTop: spacing.xxxl + spacing.md,
+      paddingBottom: spacing.xxl,
+      paddingHorizontal: spacing.xl,
+      borderBottomLeftRadius: radius.xl,
+      borderBottomRightRadius: radius.xl,
     },
     backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: spacing.sm,
+      alignSelf: 'flex-start',
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      marginBottom: spacing.md,
     },
     backText: {
-      fontSize: 32,
-      lineHeight: 34,
-      color: colors.primary,
-      marginTop: -2,
+      ...typography.label,
+      color: colors.textOnPrimary,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     headerAvatar: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: colors.tintPrimary,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,255,255,0.22)',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: spacing.sm,
     },
     headerAvatarText: {
       ...typography.title,
-      color: colors.primary,
+      color: colors.textOnPrimary,
     },
     headerBody: { flex: 1 },
     title: {
-      ...typography.title,
-      color: colors.text,
+      ...typography.h3,
+      color: colors.textOnPrimary,
     },
     subtitle: {
       ...typography.caption,
-      color: colors.textMuted,
+      color: colors.textOnPrimary,
+      opacity: 0.85,
+    },
+    panel: {
+      flex: 1,
+      marginHorizontal: spacing.md,
+      marginTop: -spacing.lg,
+      marginBottom: spacing.sm,
+      backgroundColor: colors.background,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+      ...shadow.card,
     },
     loader: { marginTop: spacing.xxl },
     messageList: { flex: 1 },

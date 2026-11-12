@@ -17,6 +17,7 @@ import {
 } from '../../api/endpoints/leave';
 import { getApiErrorMessage } from '../../api/client/client';
 import { Button } from '../../components/ui/Button';
+import { DateField } from '../../components/forms/DateField';
 import { OptionPicker } from '../../components/forms/OptionPicker';
 import { KeyboardForm } from '../../components/layout/KeyboardForm';
 import { TextField } from '../../components/ui/TextField';
@@ -40,6 +41,12 @@ import {
   toDateInputValue,
   todayDateString,
 } from '../../utils/leaveDates';
+
+function localDate(value: string): Date | undefined {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return undefined;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
 
 type Props = {
   session: AuthSession;
@@ -306,18 +313,13 @@ export function LeaveEntryForm({
                 onChange={setReason}
               />
 
-              <TextField
-                label="Date From"
-                placeholder="YYYY-MM-DD"
-                value={dateFrom}
-                onChangeText={setDateFrom}
-              />
+              <DateField label="Date From" value={dateFrom} onChange={setDateFrom} />
 
-              <TextField
+              <DateField
                 label="Date To"
-                placeholder="YYYY-MM-DD"
                 value={dateTo}
-                onChangeText={setDateTo}
+                onChange={setDateTo}
+                minimumDate={localDate(dateFrom)}
               />
 
               <OptionPicker

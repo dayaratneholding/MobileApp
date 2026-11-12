@@ -24,8 +24,9 @@ export const MOBILE_APP_API_URL = `https://hcm.pskerp.com/api/MobileApp`; // Res
 export const FILE_MANAGER_API_URL = 'http://2.24.130.171:5000/api/';
 
 /** Chat API (REST + SignalR hub at /hubs/chat) */
-export const CHAT_API_URL = 'http://2.24.130.171:5055';
+export const CHAT_API_URL = 'https://chat.pskerp.com';
 
 /** Face attendance service (enroll, match, and save location with the punch). */
-export const FACE_API_URL = 'http://2.24.130.171:7013';
+export const FACE_API_URL = 'https://facerecognition.pskerp.com';
+
 export const FACE_API_KEY = 'dev-face-key';
