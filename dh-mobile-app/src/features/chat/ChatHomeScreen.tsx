@@ -29,7 +29,8 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { GroupSummary } from '../../types/chat';
-import { ensureChatHub, stopChatHub } from '../../services/chatHub';
+import { setActiveChatGroup } from '../../services/chatAlerts';
+import { ensureChatHub } from '../../services/chatHub';
 import {
   GroupMemberPermission,
   GroupMessagePermission,
@@ -101,6 +102,11 @@ export function ChatHomeScreen({ session, onBack }: Props) {
   }, [load]);
 
   useEffect(() => {
+    setActiveChatGroup(selected?.id ?? null);
+    return () => setActiveChatGroup(null);
+  }, [selected]);
+
+  useEffect(() => {
     let hub: HubConnection | null = null;
     let active = true;
 
@@ -137,7 +143,6 @@ export function ChatHomeScreen({ session, onBack }: Props) {
     return () => {
       active = false;
       hub?.off('messageReceived', onMessage);
-      void stopChatHub();
     };
   }, [session.userID, session.comSerialID]);
 

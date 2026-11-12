@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -17,6 +17,8 @@ import {
   getEmployeePayrollPeriods,
   getPayrollPeriods,
 } from '../../api/endpoints/payrollPeriod';
+import { setChatIdentity } from '../../api/client/chatClient';
+import { listGroups } from '../../api/endpoints/chat';
 import { getApiErrorMessage } from '../../api/client/client';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
@@ -31,6 +33,9 @@ import { MachinesHomeScreen } from '../machines/MachinesHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 import { PayslipScreen } from '../payslip/PayslipScreen';
 import { ViewAttendanceScreen } from '../attendance/ViewAttendanceScreen';
+import { notifyIncomingMessage, prepareChatNotifications } from '../../services/chatAlerts';
+import { ensureChatHub, stopChatHub } from '../../services/chatHub';
+import { parseChatMessage } from '../chat/chatModel';
 import { ChatHomeScreen } from '../chat/ChatHomeScreen';
 import { FaceCheckInScreen } from '../face/FaceCheckInScreen';
 
@@ -270,11 +275,66 @@ export function Dashboard({ session, onLogout }: Props) {
     }
   }, [session.comSerialID, session.eESerialID]);
 
+  const [unreadGroupCount, setUnreadGroupCount] = useState(0);
+  const groupNames = useRef<Record<string, string>>({});
+
+  const refreshUnreadGroups = useCallback(async () => {
+    setChatIdentity(session.userID, session.comSerialID);
+    try {
+      const groups = await listGroups();
+      const names: Record<string, string> = {};
+      let count = 0;
+      for (const group of groups ?? []) {
+        names[group.id] = group.name || 'Group';
+        if (group.unreadCount > 0) count += 1;
+      }
+      groupNames.current = names;
+      setUnreadGroupCount(count);
+    } catch {
+      // Keep the last count if the chat server is briefly unreachable.
+    }
+  }, [session.comSerialID, session.userID]);
+
   useEffect(() => {
     if (activeScreen === 'main') {
       loadDashboardSummary();
+      refreshUnreadGroups();
     }
-  }, [activeScreen, loadDashboardSummary]);
+  }, [activeScreen, loadDashboardSummary, refreshUnreadGroups]);
+
+  useEffect(() => {
+    let hub: Awaited<ReturnType<typeof ensureChatHub>> | null = null;
+    let active = true;
+    setChatIdentity(session.userID, session.comSerialID);
+    prepareChatNotifications().catch(() => undefined);
+
+    const onMessage = (raw: unknown) => {
+      const message = parseChatMessage(raw);
+      if (!message) return;
+      const mine =
+        message.senderId.trim().toLowerCase() === session.userID.trim().toLowerCase();
+      notifyIncomingMessage(
+        raw,
+        session.userID,
+        groupNames.current[message.groupId],
+      ).catch(() => undefined);
+      if (!mine) refreshUnreadGroups();
+    };
+
+    ensureChatHub(session.userID, session.comSerialID)
+      .then((connection) => {
+        if (!active) return;
+        hub = connection;
+        connection.on('messageReceived', onMessage);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+      hub?.off('messageReceived', onMessage);
+      void stopChatHub();
+    };
+  }, [refreshUnreadGroups, session.comSerialID, session.userID]);
 
   const widgets = useMemo<Widget[]>(
     () => [
@@ -345,8 +405,8 @@ export function Dashboard({ session, onLogout }: Props) {
       {
         key: 'chat',
         title: 'Messages',
-        subtitle: 'Groups and files',
-        value: 'Open',
+        subtitle: unreadGroupCount > 0 ? 'Groups with new messages' : 'Groups and files',
+        value: unreadGroupCount > 0 ? String(unreadGroupCount) : 'Open',
         emoji: '💬',
         tint: colors.tintPrimary,
         accent: colors.primary,
@@ -359,6 +419,7 @@ export function Dashboard({ session, onLogout }: Props) {
       monthLabel,
       salaryAdvanceCount,
       salaryAdvancePeriod,
+      unreadGroupCount,
     ],
   );
 
@@ -521,6 +582,11 @@ export function Dashboard({ session, onLogout }: Props) {
                                 : undefined
                 }
               >
+                {w.key === 'chat' && unreadGroupCount > 0 ? (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{unreadGroupCount}</Text>
+                  </View>
+                ) : null}
                 <View style={[styles.widgetIcon, { backgroundColor: w.tint }]}>
                   <Text style={styles.widgetEmoji}>{w.emoji}</Text>
                 </View>
@@ -767,6 +833,24 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     padding: spacing.lg,
     marginBottom: spacing.lg,
     ...shadow.soft,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  unreadBadgeText: {
+    ...typography.caption,
+    color: colors.textOnPrimary,
+    fontWeight: '700',
   },
   widgetIcon: {
     width: 52,

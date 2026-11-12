@@ -19,6 +19,7 @@ import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { radius, spacing, typography, type ColorPalette, type ShadowTokens } from '../../styles/theme';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
+import { saveSavedLogin } from '../../services/savedLogin';
 import type { AuthSession, UserCompany } from '../../types/api';
 
 type Props = {
@@ -96,6 +97,14 @@ export function LoginScreen({ onLogin }: Props) {
         comSerialID: Number(selectedCompany.comSerialID),
         password,
         company: selectedCompany,
+      });
+
+      await saveSavedLogin({
+        userID: username.trim(),
+        password,
+        comSerialID: Number(selectedCompany.comSerialID),
+        companyName: selectedCompany.comName,
+        companyCode: selectedCompany.comCode,
       });
 
       onLogin(session);

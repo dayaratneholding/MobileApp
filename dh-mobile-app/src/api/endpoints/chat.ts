@@ -45,6 +45,18 @@ export function deleteMessage(groupId: string, messageId: string): Promise<void>
   });
 }
 
+export function registerChatDevice(platform: string, pushToken: string): Promise<void> {
+  return chatRequest<void>('/devices', {
+    method: 'POST',
+    body: JSON.stringify({ platform, pushToken }),
+  });
+}
+
+export function unregisterChatDevice(pushToken: string): Promise<void> {
+  const params = new URLSearchParams({ pushToken });
+  return chatRequest<void>(`/devices?${params.toString()}`, { method: 'DELETE' });
+}
+
 export function markGroupRead(groupId: string, messageId: string): Promise<void> {
   return chatRequest<void>(`/groups/${groupId}/read`, {
     method: 'POST',
