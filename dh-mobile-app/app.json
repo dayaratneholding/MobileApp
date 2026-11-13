@@ -4,7 +4,7 @@
     "slug": "dh-mobile-app",
     "version": "1.0.10",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/psk-logo.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -21,10 +21,8 @@
       "googleServicesFile": "./google-services.json",
       "versionCode": 11,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/psk-logo.png"
       },
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
@@ -37,7 +35,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/psk-logo.png"
     },
     "plugins": [
       [
