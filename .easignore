@@ -12,6 +12,7 @@ PLAY-UPLOAD-AFTER-48H.zip
 builds
 credentials
 credentials.json
+*firebase-adminsdk*.json
 keystore-info.txt
 swagger.json
 hcm-swagger.json

@@ -2,7 +2,7 @@
   "expo": {
     "name": "DH Mobile App",
     "slug": "dh-mobile-app",
-    "version": "1.0.8",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,8 @@
     },
     "android": {
       "package": "app.pskerp.com",
-      "versionCode": 9,
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 11,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -42,13 +43,13 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance."
+          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance and group chat photos."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance."
+          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance and group chat photos."
         }
       ],
       [
@@ -62,9 +63,11 @@
       [
         "expo-notifications",
         {
-          "color": "#4F46E5"
+          "color": "#4F46E5",
+          "defaultChannel": "chat"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

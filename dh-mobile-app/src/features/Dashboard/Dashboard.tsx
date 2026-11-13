@@ -33,7 +33,11 @@ import { MachinesHomeScreen } from '../machines/MachinesHomeScreen';
 import { SalaryAdvanceHomeScreen } from '../salaryAdvance/SalaryAdvanceHomeScreen';
 import { PayslipScreen } from '../payslip/PayslipScreen';
 import { ViewAttendanceScreen } from '../attendance/ViewAttendanceScreen';
-import { notifyIncomingMessage, prepareChatNotifications } from '../../services/chatAlerts';
+import {
+  notifyIncomingMessage,
+  prepareChatNotifications,
+  subscribeOpenedChat,
+} from '../../services/chatAlerts';
 import { ensureChatHub, stopChatHub } from '../../services/chatHub';
 import { parseChatMessage } from '../chat/chatModel';
 import { ChatHomeScreen } from '../chat/ChatHomeScreen';
@@ -294,6 +298,8 @@ export function Dashboard({ session, onLogout }: Props) {
       // Keep the last count if the chat server is briefly unreachable.
     }
   }, [session.comSerialID, session.userID]);
+
+  useEffect(() => subscribeOpenedChat(() => setActiveScreen('chat')), []);
 
   useEffect(() => {
     if (activeScreen === 'main') {

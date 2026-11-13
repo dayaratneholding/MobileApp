@@ -4,7 +4,9 @@ import {
   Alert,
   Dimensions,
   FlatList,
+  Image,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,12 +18,15 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import type { HubConnection } from '@microsoft/signalr';
 import {
   absoluteFileUrl,
   createFolder,
   downloadSharedFile,
+  localFileForUpload,
   uploadFiles,
+  viewSharedFile,
 } from '../../api/client/fileManagerClient';
 import { getApiErrorMessage } from '../../api/client/client';
 import {
@@ -155,6 +160,15 @@ async function loadGroupHistory(groupId: string): Promise<{ messages: LocalMessa
   return { messages: sortMessages(collected), hasMore };
 }
 
+function isImageMessage(message: { type: MessageType; fileName?: string | null }): boolean {
+  if (message.type === 'Image') return true;
+  return /\.(jpe?g|png|gif|webp)$/i.test(message.fileName || '');
+}
+
+function previewUrl(fileUrl: string): string {
+  return absoluteFileUrl(fileUrl).replace('/api/files/download?', '/api/files/view?');
+}
+
 function attachmentLabel(type: MessageType): string {
   if (type === 'Image') return 'Photo';
   if (type === 'Audio') return 'Audio';
@@ -177,6 +191,7 @@ export function ChatThreadScreen({
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<{ uri: string; name: string } | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [nameById, setNameById] = useState<Record<string, string>>({});
   const [cursor, setCursor] = useState(0);
@@ -349,6 +364,40 @@ export function ChatThreadScreen({
     await publish({ id: createMessageId(), type: 'Text', body });
   };
 
+  const sharePickedFile = async (file: {
+    uri: string;
+    name: string;
+    type: string;
+    size?: number | null;
+  }) => {
+    stickToEnd.current = true;
+    setSending(true);
+    try {
+      const folder = `chat/${group.id}`;
+      const localUri = await localFileForUpload(file.uri, file.name);
+      await createFolder(folder);
+      const uploaded = await uploadFiles(folder, [
+        { uri: localUri, name: file.name, type: file.type },
+      ]);
+      const saved = uploaded.uploaded?.[0];
+      const fileUrl = absoluteFileUrl(saved?.downloadUrl || saved?.viewUrl || '');
+      if (!fileUrl) {
+        throw new Error('The file uploaded, but no download link was returned.');
+      }
+      await publish({
+        id: createMessageId(),
+        type: typeForMime(file.type),
+        body: null,
+        fileUrl,
+        fileName: file.name,
+        size: file.size ?? saved.sizeBytes,
+      });
+    } catch (err) {
+      Alert.alert('File not shared', getApiErrorMessage(err));
+      setSending(false);
+    }
+  };
+
   const handleAttach = async () => {
     if (sending) return;
     const picked = await DocumentPicker.getDocumentAsync({
@@ -358,31 +407,55 @@ export function ChatThreadScreen({
     if (picked.canceled || !picked.assets?.[0]) return;
 
     const file = picked.assets[0];
-    const mime = file.mimeType || 'application/octet-stream';
-    stickToEnd.current = true;
-    setSending(true);
+    await sharePickedFile({
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType || 'application/octet-stream',
+      size: file.size,
+    });
+  };
+
+  const handleCamera = async () => {
+    if (sending) return;
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Camera needed', 'Allow the camera to send a photo in this group.');
+      return;
+    }
+
+    const picked = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      cameraType: ImagePicker.CameraType.back,
+      allowsEditing: false,
+      quality: 0.7,
+    });
+    if (picked.canceled || !picked.assets?.[0]) return;
+
+    const photo = picked.assets[0];
+    const name = photo.fileName && /\.[a-z0-9]+$/i.test(photo.fileName)
+      ? photo.fileName
+      : `photo-${Date.now()}.jpg`;
+    await sharePickedFile({
+      uri: photo.uri,
+      name,
+      type: photo.mimeType || 'image/jpeg',
+      size: photo.fileSize,
+    });
+  };
+
+  const handleView = async (message: LocalMessage) => {
+    if (!message.fileUrl || downloadingId) return;
+    if (isImageMessage(message)) {
+      setViewer({ uri: previewUrl(message.fileUrl), name: message.fileName || 'Photo' });
+      return;
+    }
+    setDownloadingId(message.id);
     try {
-      const folder = `chat/${group.id}`;
-      await createFolder(folder);
-      const uploaded = await uploadFiles(folder, [
-        { uri: file.uri, name: file.name, type: mime },
-      ]);
-      const saved = uploaded.uploaded?.[0];
-      const fileUrl = absoluteFileUrl(saved?.downloadUrl || saved?.viewUrl || '');
-      if (!fileUrl) {
-        throw new Error('The file uploaded, but no download link was returned.');
-      }
-      await publish({
-        id: createMessageId(),
-        type: typeForMime(mime),
-        body: null,
-        fileUrl,
-        fileName: file.name,
-        size: file.size ?? saved.sizeBytes,
-      });
+      await viewSharedFile(message.fileUrl, message.fileName || 'file');
     } catch (err) {
-      Alert.alert('File not shared', getApiErrorMessage(err));
-      setSending(false);
+      Alert.alert('Could not open', getApiErrorMessage(err));
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -518,7 +591,7 @@ export function ChatThreadScreen({
           ListHeaderComponent={
             loadingEarlier ? (
               <ActivityIndicator color={colors.primary} style={styles.earlier} />
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
@@ -555,7 +628,7 @@ export function ChatThreadScreen({
                 <Pressable
                   onLongPress={() => handleDelete(item)}
                   onPress={() => {
-                    if (item.fileUrl && !deleted) handleDownload(item);
+                    if (item.fileUrl && !deleted && isImageMessage(item)) handleView(item);
                   }}
                   style={[
                     styles.bubbleWrap,
@@ -577,7 +650,14 @@ export function ChatThreadScreen({
                       deleted ? styles.deletedBubble : null,
                     ]}
                   >
-                    {attachment ? (
+                    {attachment && isImageMessage(item) ? (
+                      <View>
+                        <Image source={{ uri: previewUrl(item.fileUrl || '') }} style={styles.photo} />
+                        <Text style={[styles.fileHint, mine ? styles.mineTime : styles.theirTime]}>
+                          Tap to view
+                        </Text>
+                      </View>
+                    ) : attachment ? (
                       <View style={styles.fileRow}>
                         <View style={[styles.fileIcon, mine ? styles.fileIconMine : styles.fileIconTheirs]}>
                           <Text style={[styles.fileIconText, mine ? styles.mineText : styles.theirText]}>
@@ -591,11 +671,18 @@ export function ChatThreadScreen({
                           >
                             {item.fileName || messagePreview(item)}
                           </Text>
-                          <Text style={[styles.fileHint, mine ? styles.mineTime : styles.theirTime]}>
-                            {downloadingId === item.id
-                              ? 'Downloading…'
-                              : `${attachmentLabel(item.type)} · Tap to download`}
-                          </Text>
+                          <View style={styles.fileActions}>
+                            <Pressable onPress={() => handleView(item)} disabled={downloadingId === item.id}>
+                              <Text style={[styles.fileAction, mine ? styles.mineText : styles.theirMention]}>
+                                {downloadingId === item.id ? 'Opening…' : 'View'}
+                              </Text>
+                            </Pressable>
+                            <Pressable onPress={() => handleDownload(item)} disabled={downloadingId === item.id}>
+                              <Text style={[styles.fileAction, mine ? styles.mineTime : styles.theirTime]}>
+                                Save
+                              </Text>
+                            </Pressable>
+                          </View>
                         </View>
                       </View>
                     ) : (
@@ -676,6 +763,9 @@ export function ChatThreadScreen({
         <Pressable style={styles.attach} onPress={handleAttach} disabled={sending}>
           <Text style={styles.attachText}>+</Text>
         </Pressable>
+        <Pressable style={styles.attach} onPress={handleCamera} disabled={sending}>
+          <Text style={styles.cameraText}>📷</Text>
+        </Pressable>
         <TextInput
           style={styles.input}
           value={draft}
@@ -696,6 +786,16 @@ export function ChatThreadScreen({
           <Text style={styles.sendText}>↑</Text>
         </Pressable>
       </View>
+      <Modal visible={viewer !== null} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
+        <View style={styles.viewer}>
+          <Pressable style={styles.viewerClose} onPress={() => setViewer(null)}>
+            <Text style={styles.viewerCloseText}>Close</Text>
+          </Pressable>
+          {viewer ? (
+            <Image source={{ uri: viewer.uri }} style={styles.viewerImage} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -890,9 +990,43 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       ...typography.label,
     },
     fileHint: {
-      fontSize: 11,
-      lineHeight: 14,
-      marginTop: 1,
+      ...typography.caption,
+      marginTop: 4,
+    },
+    fileActions: {
+      flexDirection: 'row',
+      marginTop: 6,
+    },
+    fileAction: {
+      ...typography.caption,
+      fontWeight: '700',
+      marginRight: spacing.md,
+    },
+    photo: {
+      width: 220,
+      height: 160,
+      borderRadius: 12,
+      backgroundColor: 'rgba(0,0,0,0.08)',
+    },
+    viewer: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.92)',
+      justifyContent: 'center',
+    },
+    viewerClose: {
+      position: 'absolute',
+      top: spacing.xxxl,
+      right: spacing.lg,
+      zIndex: 2,
+      padding: spacing.sm,
+    },
+    viewerCloseText: {
+      ...typography.label,
+      color: '#FFFFFF',
+    },
+    viewerImage: {
+      width: '100%',
+      height: '80%',
     },
     mentionCard: {
       marginHorizontal: spacing.md,
@@ -982,6 +1116,10 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       lineHeight: 28,
       color: colors.primary,
       marginTop: -1,
+    },
+    cameraText: {
+      fontSize: 18,
+      lineHeight: 22,
     },
     input: {
       flex: 1,

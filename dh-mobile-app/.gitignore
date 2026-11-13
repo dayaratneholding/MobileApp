@@ -20,6 +20,7 @@ expo-env.d.ts
 keystore-info.txt
 credentials/android/
 credentials.json
+*firebase-adminsdk*.json
 PLAY-UPLOAD-AFTER-48H/
 
 # Metro

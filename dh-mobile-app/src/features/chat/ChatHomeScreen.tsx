@@ -29,7 +29,12 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { GroupSummary } from '../../types/chat';
-import { setActiveChatGroup } from '../../services/chatAlerts';
+import {
+  clearPendingChatGroup,
+  peekPendingChatGroup,
+  setActiveChatGroup,
+  subscribeOpenedChat,
+} from '../../services/chatAlerts';
 import { ensureChatHub } from '../../services/chatHub';
 import {
   GroupMemberPermission,
@@ -100,6 +105,19 @@ export function ChatHomeScreen({ session, onBack }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const openPending = () => {
+      const groupId = peekPendingChatGroup();
+      if (!groupId) return;
+      const match = groups.find((group) => group.id === groupId);
+      if (!match) return;
+      clearPendingChatGroup();
+      setSelected(match);
+    };
+    openPending();
+    return subscribeOpenedChat(openPending);
+  }, [groups]);
 
   useEffect(() => {
     setActiveChatGroup(selected?.id ?? null);
@@ -394,7 +412,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
                 </View>
               }
               ListHeaderComponent={
-                error ? <Text style={styles.error}>{error}</Text> : null
+                error ? <Text style={styles.error}>{error}</Text> : undefined
               }
               renderItem={({ item }) => (
                 <Pressable style={styles.row} onPress={() => setSelected(item)}>

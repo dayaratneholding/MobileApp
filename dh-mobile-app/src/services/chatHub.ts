@@ -5,20 +5,21 @@ import {
   HubConnectionState,
   LogLevel,
 } from '@microsoft/signalr';
-import { CHAT_API_URL } from '../config/api';
+import { resolveChatBase } from '../config/serviceHosts';
 
 let connection: HubConnection | null = null;
 let connectedKey: string | null = null;
 let starting: Promise<HubConnection> | null = null;
 
-function buildHub(userId: string, comSerialID: number): HubConnection {
+async function buildHub(userId: string, comSerialID: number): Promise<HubConnection> {
   const params = new URLSearchParams({
     userID: userId,
     comSerialID: String(comSerialID),
   });
+  const base = await resolveChatBase();
 
   const hub = new HubConnectionBuilder()
-    .withUrl(`${CHAT_API_URL}/hubs/chat?${params.toString()}`, {
+    .withUrl(`${base}/hubs/chat?${params.toString()}`, {
       // Keep the login token off this URL. A long token makes negotiate return HTTP 414.
       // The hub reads userID and comSerialID from the query.
       // chat.pskerp.com is behind Cloudflare. Negotiate succeeds, then the
@@ -50,7 +51,7 @@ export async function ensureChatHub(userId: string, comSerialID: number): Promis
   }
 
   if (!connection) {
-    connection = buildHub(userId, comSerialID);
+    connection = await buildHub(userId, comSerialID);
     connectedKey = key;
   }
 
@@ -63,6 +64,13 @@ export async function ensureChatHub(userId: string, comSerialID: number): Promis
     starting = hub
       .start()
       .then(() => hub)
+      .catch((err) => {
+        if (connection === hub) {
+          connection = null;
+          connectedKey = null;
+        }
+        throw err;
+      })
       .finally(() => {
         starting = null;
       });

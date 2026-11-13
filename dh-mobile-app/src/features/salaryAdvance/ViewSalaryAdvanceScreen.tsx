@@ -335,7 +335,7 @@ export function ViewSalaryAdvanceScreen({
                 style={styles.footerLoader}
                 color={colors.primary}
               />
-            ) : null
+            ) : undefined
           }
         />
       )}

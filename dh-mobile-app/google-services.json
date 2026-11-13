@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "491439204362",
+    "project_id": "dh-mobile-app-50d4e",
+    "storage_bucket": "dh-mobile-app-50d4e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:491439204362:android:6721405ccdbdcf3ef317f3",
+        "android_client_info": {
+          "package_name": "app.pskerp.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYEeVIOxumnuO31HPUBsWx598T_L246jg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

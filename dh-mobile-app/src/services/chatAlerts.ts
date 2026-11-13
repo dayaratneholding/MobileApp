@@ -19,10 +19,51 @@ Notifications.setNotificationHandler({
 let activeGroupId: string | null = null;
 let notificationsReady = false;
 let registeredPushToken: string | null = null;
+let pendingGroupId: string | null = null;
+const openedListeners = new Set<(groupId: string) => void>();
+
+function readGroupId(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const groupId = (data as { groupId?: unknown }).groupId;
+  return typeof groupId === 'string' && groupId.trim() ? groupId : null;
+}
+
+function rememberOpenedGroup(data: unknown) {
+  const groupId = readGroupId(data);
+  if (!groupId) return;
+  pendingGroupId = groupId;
+  openedListeners.forEach((listener) => listener(groupId));
+}
 
 export function setActiveChatGroup(groupId: string | null) {
   activeGroupId = groupId;
 }
+
+export function subscribeOpenedChat(listener: (groupId: string) => void) {
+  openedListeners.add(listener);
+  if (pendingGroupId) listener(pendingGroupId);
+  return () => {
+    openedListeners.delete(listener);
+  };
+}
+
+export function peekPendingChatGroup() {
+  return pendingGroupId;
+}
+
+export function clearPendingChatGroup() {
+  pendingGroupId = null;
+}
+
+Notifications.addNotificationResponseReceivedListener((response) => {
+  rememberOpenedGroup(response.notification.request.content.data);
+});
+
+Notifications.getLastNotificationResponseAsync()
+  .then((response) => {
+    if (response) rememberOpenedGroup(response.notification.request.content.data);
+  })
+  .catch(() => undefined);
 
 export function getRegisteredPushToken() {
   return registeredPushToken;
@@ -73,7 +114,7 @@ export async function notifyIncomingMessage(
       sound: 'default',
       data: { groupId: message.groupId },
     },
-    trigger: null,
+    trigger: Platform.OS === 'android' ? { channelId: 'chat' } : null,
   });
 
   return message;
