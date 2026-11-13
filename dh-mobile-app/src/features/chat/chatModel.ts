@@ -1,4 +1,4 @@
-import type { ChatMessage, MessageType } from '../../types/chat';
+import type { ChatMessage, MessageReaction, MessageType } from '../../types/chat';
 
 export function createMessageId(): string {
   const bytes = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
@@ -26,6 +26,20 @@ function readNullableString(record: Record<string, unknown>, ...keys: string[]):
 }
 
 const MESSAGE_TYPES: MessageType[] = ['Text', 'Image', 'Audio', 'Video', 'File'];
+
+export function parseMessageReactions(value: unknown): MessageReaction[] {
+  if (!Array.isArray(value)) return [];
+  const reactions: MessageReaction[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const userId = readString(record, 'userId', 'UserId');
+    const emoji = readString(record, 'emoji', 'Emoji');
+    if (!userId || !emoji) continue;
+    reactions.push({ userId, emoji });
+  }
+  return reactions;
+}
 
 export function parseChatMessage(raw: unknown): ChatMessage | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -55,6 +69,7 @@ export function parseChatMessage(raw: unknown): ChatMessage | null {
     createdAt: readString(record, 'createdAt', 'CreatedAt'),
     editedAt: readNullableString(record, 'editedAt', 'EditedAt'),
     deletedAt: readNullableString(record, 'deletedAt', 'DeletedAt'),
+    reactions: parseMessageReactions(record.reactions ?? record.Reactions),
   };
 }
 

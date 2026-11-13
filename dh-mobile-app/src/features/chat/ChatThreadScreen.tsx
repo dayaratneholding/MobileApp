@@ -35,6 +35,7 @@ import {
   listMessages,
   markGroupRead,
   sendMessage,
+  setMessageReaction,
   type GroupMember,
 } from '../../api/endpoints/chat';
 import { getAllUsers } from '../../api/endpoints/users';
@@ -55,10 +56,12 @@ import {
   messagePreview,
   parseChatInstant,
   parseChatMessage,
+  parseMessageReactions,
   sortMessages,
   splitMentionParts,
   upsertMessage,
 } from './chatModel';
+import { REACTION_EMOJIS, reactionGroups, type ReactionEmoji } from './messageReactions';
 
 type Props = {
   group: GroupSummary;
@@ -176,6 +179,17 @@ function attachmentLabel(type: MessageType): string {
   return 'File';
 }
 
+function isPdfMessage(message: { fileName?: string | null; fileUrl?: string | null }): boolean {
+  return /\.pdf(?:$|[?#])/i.test(`${message.fileName || ''} ${message.fileUrl || ''}`);
+}
+
+function formatFileSize(size?: number | null): string {
+  if (size == null || size < 0) return '';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ChatThreadScreen({
   group,
   currentUserId,
@@ -197,6 +211,9 @@ export function ChatThreadScreen({
   const [cursor, setCursor] = useState(0);
   const [keyboardLift, setKeyboardLift] = useState(0);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [reactionTarget, setReactionTarget] = useState<string | null>(null);
+  const lastTapRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<LocalMessage>>(null);
   const stickToEnd = useRef(true);
   const hasMore = useRef(false);
@@ -305,12 +322,35 @@ export function ChatThreadScreen({
     let hub: HubConnection | null = null;
     let active = true;
 
+    const onReaction = (raw: unknown) => {
+      if (!raw || typeof raw !== 'object') return;
+      const record = raw as Record<string, unknown>;
+      const groupId =
+        typeof record.groupId === 'string'
+          ? record.groupId
+          : typeof record.GroupId === 'string'
+            ? record.GroupId
+            : '';
+      const messageId =
+        typeof record.messageId === 'string'
+          ? record.messageId
+          : typeof record.MessageId === 'string'
+            ? record.MessageId
+            : '';
+      if (!messageId || groupId !== group.id) return;
+      const reactions = parseMessageReactions(record.reactions ?? record.Reactions);
+      setMessages((current) =>
+        current.map((item) => (item.id === messageId ? { ...item, reactions } : item)),
+      );
+    };
+
     ensureChatHub(currentUserId, comSerialID)
       .then((connection) => {
         if (!active) return;
         hub = connection;
         connection.on('messageReceived', applyIncoming);
         connection.on('messageUpdated', applyIncoming);
+        connection.on('reactionUpdated', onReaction);
       })
       .catch(() => undefined);
 
@@ -318,8 +358,9 @@ export function ChatThreadScreen({
       active = false;
       hub?.off('messageReceived', applyIncoming);
       hub?.off('messageUpdated', applyIncoming);
+      hub?.off('reactionUpdated', onReaction);
     };
-  }, [applyIncoming, currentUserId, comSerialID]);
+  }, [applyIncoming, currentUserId, comSerialID, group.id]);
 
   const publish = async (input: {
     id: string;
@@ -441,6 +482,38 @@ export function ChatThreadScreen({
       type: photo.mimeType || 'image/jpeg',
       size: photo.fileSize,
     });
+  };
+
+  const applyReaction = useCallback(
+    (messageId: string, emoji: ReactionEmoji) => {
+      setReactionTarget(null);
+      setMessageReaction(group.id, messageId, emoji)
+        .then((result) => {
+          const record = result as unknown as Record<string, unknown>;
+          const reactions = parseMessageReactions(record.reactions ?? record.Reactions);
+          setMessages((current) =>
+            current.map((item) => (item.id === messageId ? { ...item, reactions } : item)),
+          );
+        })
+        .catch((err) => Alert.alert('Like not saved', getApiErrorMessage(err)));
+    },
+    [group.id],
+  );
+
+  const handleBubblePress = (message: LocalMessage, deleted: boolean) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last.id === message.id && now - last.at < 280) {
+      if (openTimerRef.current) clearTimeout(openTimerRef.current);
+      lastTapRef.current = { id: '', at: 0 };
+      if (!deleted) applyReaction(message.id, '👍');
+      return;
+    }
+    lastTapRef.current = { id: message.id, at: now };
+    if (openTimerRef.current) clearTimeout(openTimerRef.current);
+    if (message.fileUrl && !deleted && isImageMessage(message)) {
+      openTimerRef.current = setTimeout(() => handleView(message), 280);
+    }
   };
 
   const handleView = async (message: LocalMessage) => {
@@ -626,20 +699,39 @@ export function ChatThreadScreen({
                   </View>
                 ) : null}
                 <Pressable
-                  onLongPress={() => handleDelete(item)}
-                  onPress={() => {
-                    if (item.fileUrl && !deleted && isImageMessage(item)) handleView(item);
+                  onLongPress={() => {
+                    if (!deleted) setReactionTarget(item.id);
                   }}
+                  onPress={() => handleBubblePress(item, deleted)}
                   style={[
                     styles.bubbleWrap,
                     mine ? styles.mineWrap : styles.theirWrap,
                     groupedWithPrevious ? styles.bubbleTight : styles.bubbleLoose,
+                    (item.reactions?.length ?? 0) > 0 ? styles.bubbleWithReaction : null,
                   ]}
                 >
                   {!mine && !groupedWithPrevious ? (
                     <Text style={[styles.sender, { color: senderColor(item.senderId) }]}>
                       {item.senderId}
                     </Text>
+                  ) : null}
+                  {reactionTarget === item.id && !deleted ? (
+                    <View style={[styles.reactionBar, mine ? styles.reactionBarMine : styles.reactionBarTheirs]}>
+                      {REACTION_EMOJIS.map((emoji) => (
+                        <Pressable
+                          key={emoji}
+                          style={styles.reactionChoice}
+                          onPress={() => applyReaction(item.id, emoji)}
+                        >
+                          <Text style={styles.reactionChoiceText}>{emoji}</Text>
+                        </Pressable>
+                      ))}
+                      {mine && canDeleteMessages ? (
+                        <Pressable style={styles.reactionChoice} onPress={() => handleDelete(item)}>
+                          <Text style={styles.reactionDelete}>Delete</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   ) : null}
                   <View
                     style={[
@@ -648,20 +740,19 @@ export function ChatThreadScreen({
                       mine && !groupedWithNext ? styles.mineTail : null,
                       !mine && !groupedWithNext ? styles.theirTail : null,
                       deleted ? styles.deletedBubble : null,
+                      attachment && isImageMessage(item) ? styles.imageBubble : null,
                     ]}
                   >
                     {attachment && isImageMessage(item) ? (
                       <View>
                         <Image source={{ uri: previewUrl(item.fileUrl || '') }} style={styles.photo} />
-                        <Text style={[styles.fileHint, mine ? styles.mineTime : styles.theirTime]}>
-                          Tap to view
-                        </Text>
+                        <Text style={styles.photoTime}>{clockTime(item.createdAt)}</Text>
                       </View>
                     ) : attachment ? (
                       <View style={styles.fileRow}>
-                        <View style={[styles.fileIcon, mine ? styles.fileIconMine : styles.fileIconTheirs]}>
-                          <Text style={[styles.fileIconText, mine ? styles.mineText : styles.theirText]}>
-                            {attachmentLabel(item.type).slice(0, 1)}
+                        <View style={[styles.docThumb, isPdfMessage(item) ? styles.docThumbPdf : null]}>
+                          <Text style={styles.docThumbText}>
+                            {isPdfMessage(item) ? 'PDF' : attachmentLabel(item.type).slice(0, 3).toUpperCase()}
                           </Text>
                         </View>
                         <View style={styles.fileBody}>
@@ -671,6 +762,11 @@ export function ChatThreadScreen({
                           >
                             {item.fileName || messagePreview(item)}
                           </Text>
+                          {formatFileSize(item.size) ? (
+                            <Text style={[styles.fileHint, mine ? styles.mineTime : styles.theirTime]}>
+                              {formatFileSize(item.size)}
+                            </Text>
+                          ) : null}
                           <View style={styles.fileActions}>
                             <Pressable onPress={() => handleView(item)} disabled={downloadingId === item.id}>
                               <Text style={[styles.fileAction, mine ? styles.mineText : styles.theirMention]}>
@@ -703,15 +799,31 @@ export function ChatThreadScreen({
                             )}
                       </Text>
                     )}
-                    <Text style={[styles.time, mine ? styles.mineTime : styles.theirTime]}>
-                      {item.status === 'sending'
-                        ? 'Sending'
-                        : item.status === 'failed'
-                          ? 'Not sent'
-                          : clockTime(item.createdAt)}
-                      {mine && item.status !== 'failed' && item.status !== 'sending' ? '  ✓' : ''}
-                    </Text>
+                    {attachment && isImageMessage(item) && item.status !== 'sending' && item.status !== 'failed' ? null : (
+                      <Text style={[styles.time, mine ? styles.mineTime : styles.theirTime]}>
+                        {item.status === 'sending'
+                          ? 'Sending'
+                          : item.status === 'failed'
+                            ? 'Not sent'
+                            : clockTime(item.createdAt)}
+                        {mine && item.status !== 'failed' && item.status !== 'sending' ? '  ✓' : ''}
+                      </Text>
+                    )}
                   </View>
+                  {reactionGroups(item.reactions).length > 0 ? (
+                    <View style={styles.reactionRow}>
+                      {reactionGroups(item.reactions).map(([emoji, userIds]) => (
+                        <View key={emoji} style={styles.reactionChip}>
+                          <Text style={styles.reactionEmoji}>
+                            {emoji}{' '}
+                            {userIds
+                              .map((userId) => nameById[userId.toLowerCase()] || userId)
+                              .join(', ')}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </Pressable>
               </View>
             );
@@ -920,6 +1032,53 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     bubbleLoose: { marginTop: spacing.sm },
     bubbleTight: { marginTop: 2 },
+    bubbleWithReaction: { marginBottom: spacing.sm },
+    reactionBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.xs,
+      paddingVertical: 2,
+      marginBottom: spacing.xs,
+      ...shadow.soft,
+    },
+    reactionBarMine: { alignSelf: 'flex-end' },
+    reactionBarTheirs: { alignSelf: 'flex-start' },
+    reactionChoice: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    reactionChoiceText: { fontSize: 20 },
+    reactionDelete: {
+      ...typography.caption,
+      color: colors.danger,
+      fontWeight: '700',
+    },
+    reactionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 4,
+    },
+    reactionChip: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.pill,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginRight: 4,
+      marginTop: 2,
+    },
+    reactionEmoji: {
+      ...typography.caption,
+      color: colors.text,
+    },
+    imageBubble: {
+      paddingHorizontal: 4,
+      paddingTop: 4,
+      paddingBottom: 4,
+    },
     mineWrap: { alignSelf: 'flex-end' },
     theirWrap: { alignSelf: 'flex-start' },
     sender: {
@@ -1005,8 +1164,36 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     photo: {
       width: 220,
       height: 160,
-      borderRadius: 12,
+      borderRadius: 14,
       backgroundColor: 'rgba(0,0,0,0.08)',
+    },
+    photoTime: {
+      position: 'absolute',
+      right: 8,
+      bottom: 8,
+      color: '#FFFFFF',
+      fontSize: 11,
+      fontWeight: '600',
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      overflow: 'hidden',
+      borderRadius: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    docThumb: {
+      width: 46,
+      height: 56,
+      borderRadius: 8,
+      backgroundColor: '#4F46E5',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: spacing.sm,
+    },
+    docThumbPdf: { backgroundColor: '#DC2626' },
+    docThumbText: {
+      color: '#FFFFFF',
+      fontSize: 11,
+      fontWeight: '800',
     },
     viewer: {
       flex: 1,

@@ -2,9 +2,9 @@
   "expo": {
     "name": "DH Mobile App",
     "slug": "dh-mobile-app",
-    "version": "1.0.10",
+    "version": "1.0.13",
     "orientation": "portrait",
-    "icon": "./assets/psk-logo.png",
+    "icon": "./assets/new-logo.jpeg",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -19,7 +19,7 @@
     "android": {
       "package": "app.pskerp.com",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 11,
+      "versionCode": 14,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/psk-logo.png"

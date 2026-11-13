@@ -9,6 +9,11 @@ export type GroupSummary = {
   unreadCount: number;
 };
 
+export type MessageReaction = {
+  userId: string;
+  emoji: string;
+};
+
 export type ChatMessage = {
   id: string;
   groupId: string;
@@ -22,6 +27,7 @@ export type ChatMessage = {
   createdAt: string;
   editedAt?: string | null;
   deletedAt?: string | null;
+  reactions?: MessageReaction[];
 };
 
 export type SendMessageInput = {

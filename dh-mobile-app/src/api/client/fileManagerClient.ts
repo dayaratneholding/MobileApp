@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
-import { Linking, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { currentFileManagerBase, resolveFileManagerBase } from '../../config/serviceHosts';
 import { getAuthToken } from '../../services/authToken';
 import { ApiError } from './client';
@@ -261,16 +262,39 @@ async function cacheSharedFile(url: string, fileName: string): Promise<{ uri: st
   return { uri: result.uri, name };
 }
 
+function viewFileName(fileName: string, url: string): string {
+  const name = safeFileName(fileName);
+  const looksLikePdf = /\.pdf(?:$|[?#])/i.test(`${name} ${url}`);
+  if (looksLikePdf && !name.toLowerCase().endsWith('.pdf')) {
+    return `${name}.pdf`;
+  }
+  return name;
+}
+
 /** Open a downloaded chat file in the phone viewer. */
 export async function viewSharedFile(url: string, fileName: string): Promise<void> {
-  const saved = await cacheSharedFile(url, fileName);
+  const viewUrl = url.replace('/api/files/download?', '/api/files/view?');
+  const saved = await cacheSharedFile(viewUrl, viewFileName(fileName, viewUrl));
+  const mimeType = mimeForName(saved.name);
   if (Platform.OS === 'android') {
     const contentUri = await FileSystem.getContentUriAsync(saved.uri);
-    await Linking.openURL(contentUri);
-    return;
+    try {
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        flags: 1,
+        type: mimeType,
+      });
+      return;
+    } catch {
+      await Sharing.shareAsync(saved.uri, {
+        mimeType,
+        dialogTitle: 'View file',
+      });
+      return;
+    }
   }
   await Sharing.shareAsync(saved.uri, {
-    mimeType: mimeForName(saved.name),
+    mimeType,
     dialogTitle: 'View file',
   });
 }

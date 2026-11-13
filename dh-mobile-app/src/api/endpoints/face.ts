@@ -1,6 +1,8 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import { FACE_API_KEY, FACE_API_URL } from '../../config/api';
 import type { AttendanceRecord, FaceEnrollment, FaceMatch, FacePhoto, PhoneLocation } from '../../types/face';
 import { ApiError } from '../client/client';
+import { localFileForUpload } from '../client/fileManagerClient';
 
 function faceHeaders(): Record<string, string> {
   return {
@@ -54,7 +56,7 @@ async function requestFace<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new ApiError(
-      `Cannot reach the face service at ${FACE_API_URL}. Start the Python API and confirm this phone can open that address.`,
+      `Cannot reach the face service at ${FACE_API_URL}. The phone could not open that address.`,
     );
   }
 
@@ -70,21 +72,55 @@ async function requestFace<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-function photoForm(photo: FacePhoto, fields: Record<string, string>): FormData {
-  const form = new FormData();
+async function uploadFace<T>(
+  path: string,
+  photo: FacePhoto,
+  fields: Record<string, string>,
+): Promise<T> {
+  const fileName = photo.fileName?.trim() || 'face.jpg';
+  const copied = await localFileForUpload(photo.uri, fileName);
+  const fileUri = copied.startsWith('/') ? `file://${copied}` : copied;
+  const parameters: Record<string, string> = {};
   Object.entries(fields).forEach(([key, value]) => {
-    if (value === '') {
-      return;
+    if (value !== '') {
+      parameters[key] = value;
     }
-    form.append(key, value);
   });
-  form.append('image', {
-    uri: photo.uri,
-    name: photo.fileName ?? 'face.jpg',
-    type: photo.mimeType ?? 'image/jpeg',
-  } as unknown as Blob);
 
-  return form;
+  let result: FileSystem.FileSystemUploadResult;
+  try {
+    result = await FileSystem.uploadAsync(`${FACE_API_URL}${path}`, fileUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'image',
+      mimeType: photo.mimeType || 'image/jpeg',
+      parameters,
+      headers: faceHeaders(),
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach the face service at ${FACE_API_URL}. The phone could not open that address.`,
+    );
+  }
+
+  let payload: unknown = null;
+  if (result.body) {
+    try {
+      payload = JSON.parse(result.body) as unknown;
+    } catch {
+      payload = result.body;
+    }
+  }
+
+  if (result.status < 200 || result.status >= 300) {
+    const fallback =
+      result.status === 401
+        ? 'Face service rejected the API key.'
+        : `Face service request failed (${result.status}).`;
+    throw new ApiError(errorMessage(payload, fallback));
+  }
+
+  return payload as T;
 }
 
 export function getFaceEnrollment(
@@ -94,41 +130,35 @@ export function getFaceEnrollment(
   return requestFace<FaceEnrollment>(`/api/v1/faces/${companyId}/${employeeId}`);
 }
 
-export function enrollFace(input: {
+export async function enrollFace(input: {
   photo: FacePhoto;
   companyId: number;
   employeeId: number;
   employeeName: string;
   replace?: boolean;
 }): Promise<FaceEnrollment> {
-  return requestFace<FaceEnrollment>('/api/v1/faces/enroll', {
-    method: 'POST',
-    body: photoForm(input.photo, {
-      company_id: String(input.companyId),
-      employee_id: String(input.employeeId),
-      employee_name: input.employeeName,
-      replace: input.replace === false ? 'false' : 'true',
-    }),
+  return uploadFace<FaceEnrollment>('/api/v1/faces/enroll', input.photo, {
+    company_id: String(input.companyId),
+    employee_id: String(input.employeeId),
+    employee_name: input.employeeName,
+    replace: input.replace === false ? 'false' : 'true',
   });
 }
 
-export function markFaceAttendance(input: {
+export async function markFaceAttendance(input: {
   photo: FacePhoto;
   companyId: number;
   punchedAt: string;
   location: PhoneLocation;
 }): Promise<AttendanceRecord> {
-  return requestFace<AttendanceRecord>('/api/v1/attendance/mark', {
-    method: 'POST',
-    body: photoForm(input.photo, {
-      company_id: String(input.companyId),
-      punched_at: input.punchedAt,
-      latitude: String(input.location.latitude),
-      longitude: String(input.location.longitude),
-      ...(input.location.accuracy == null
-        ? {}
-        : { accuracy_meters: String(input.location.accuracy) }),
-    }),
+  return uploadFace<AttendanceRecord>('/api/v1/attendance/mark', input.photo, {
+    company_id: String(input.companyId),
+    punched_at: input.punchedAt,
+    latitude: String(input.location.latitude),
+    longitude: String(input.location.longitude),
+    ...(input.location.accuracy == null
+      ? {}
+      : { accuracy_meters: String(input.location.accuracy) }),
   });
 }
 
@@ -143,16 +173,13 @@ export async function getFaceAttendance(input: {
   return result.records ?? [];
 }
 
-export function verifyFace(input: {
+export async function verifyFace(input: {
   photo: FacePhoto;
   companyId: number;
   employeeId: number;
 }): Promise<FaceMatch> {
-  return requestFace<FaceMatch>('/api/v1/faces/verify', {
-    method: 'POST',
-    body: photoForm(input.photo, {
-      company_id: String(input.companyId),
-      employee_id: String(input.employeeId),
-    }),
+  return uploadFace<FaceMatch>('/api/v1/faces/verify', input.photo, {
+    company_id: String(input.companyId),
+    employee_id: String(input.employeeId),
   });
 }

@@ -1,5 +1,5 @@
 import { chatRequest } from '../client/chatClient';
-import type { ChatMessage, GroupSummary, SendMessageInput } from '../../types/chat';
+import type { ChatMessage, GroupSummary, MessageReaction, SendMessageInput } from '../../types/chat';
 
 export function listGroups(): Promise<GroupSummary[]> {
   return chatRequest<GroupSummary[]>('/groups');
@@ -87,6 +87,20 @@ export function sendMessage(groupId: string, message: SendMessageInput): Promise
     method: 'POST',
     body: JSON.stringify(message),
   });
+}
+
+export function setMessageReaction(
+  groupId: string,
+  messageId: string,
+  emoji: string,
+): Promise<{ reactions: MessageReaction[] }> {
+  return chatRequest<{ reactions: MessageReaction[] }>(
+    `/groups/${groupId}/messages/${messageId}/reactions`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ emoji }),
+    },
+  );
 }
 
 export function deleteMessage(groupId: string, messageId: string): Promise<void> {

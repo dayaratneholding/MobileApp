@@ -1,8 +1,10 @@
 const CHAT_BASES = ['https://chat.pskerp.com', 'http://2.24.130.171:5055'];
 const FILE_BASES = ['https://files.pskerp.com/api/', 'http://2.24.130.171:5000/api/'];
+const FACE_BASES = ['https://facerecognition.pskerp.com'];
 
 let chatBase = CHAT_BASES[0];
 let fileBase = FILE_BASES[0];
+let faceBase = FACE_BASES[0];
 
 function withTimeout(ms: number): AbortSignal {
   const controller = new AbortController();
@@ -26,7 +28,7 @@ async function firstReachable(preferred: string, candidates: string[], probe: (b
       return base;
     }
   }
-  return preferred;
+  return ordered[ordered.length - 1] ?? preferred;
 }
 
 /** Use the chat name when the phone can resolve it, otherwise the direct server address. */
@@ -43,4 +45,10 @@ export async function resolveFileManagerBase(): Promise<string> {
 
 export function currentFileManagerBase(): string {
   return fileBase;
+}
+
+/** Use the face name when the phone can resolve it, otherwise the direct server address. */
+export async function resolveFaceBase(): Promise<string> {
+  faceBase = await firstReachable(faceBase, FACE_BASES, (base) => `${base}/health`);
+  return faceBase;
 }
