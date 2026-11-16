@@ -1,4 +1,4 @@
-import { CHAT_API_URL } from '../../config/api';
+import { resolveChatBase } from '../../config/serviceHosts';
 import { getAuthToken } from '../../services/authToken';
 import { ApiError } from './client';
 
@@ -52,14 +52,15 @@ export async function chatRequest<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
+  const base = await resolveChatBase();
   let response: Response;
   try {
-    response = await fetch(`${CHAT_API_URL}${withIdentity(path)}`, {
+    response = await fetch(`${base}${withIdentity(path)}`, {
       ...init,
       headers,
     });
   } catch {
-    throw new ApiError(`Cannot reach the chat server (${CHAT_API_URL}).`);
+    throw new ApiError(`Cannot reach the chat server (${base}). The phone could not resolve the chat address.`);
   }
 
   const text = await response.text();

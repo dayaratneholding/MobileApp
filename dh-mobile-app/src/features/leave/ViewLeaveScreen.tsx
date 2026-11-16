@@ -340,7 +340,7 @@ export function ViewLeaveScreen({
                 style={styles.footerLoader}
                 color={colors.primary}
               />
-            ) : null
+            ) : undefined
           }
         />
       )}

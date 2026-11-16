@@ -29,7 +29,13 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import type { GroupSummary } from '../../types/chat';
-import { ensureChatHub, stopChatHub } from '../../services/chatHub';
+import {
+  clearPendingChatGroup,
+  peekPendingChatGroup,
+  setActiveChatGroup,
+  subscribeOpenedChat,
+} from '../../services/chatAlerts';
+import { ensureChatHub } from '../../services/chatHub';
 import {
   GroupMemberPermission,
   GroupMessagePermission,
@@ -101,6 +107,24 @@ export function ChatHomeScreen({ session, onBack }: Props) {
   }, [load]);
 
   useEffect(() => {
+    const openPending = () => {
+      const groupId = peekPendingChatGroup();
+      if (!groupId) return;
+      const match = groups.find((group) => group.id === groupId);
+      if (!match) return;
+      clearPendingChatGroup();
+      setSelected(match);
+    };
+    openPending();
+    return subscribeOpenedChat(openPending);
+  }, [groups]);
+
+  useEffect(() => {
+    setActiveChatGroup(selected?.id ?? null);
+    return () => setActiveChatGroup(null);
+  }, [selected]);
+
+  useEffect(() => {
     let hub: HubConnection | null = null;
     let active = true;
 
@@ -137,7 +161,6 @@ export function ChatHomeScreen({ session, onBack }: Props) {
     return () => {
       active = false;
       hub?.off('messageReceived', onMessage);
-      void stopChatHub();
     };
   }, [session.userID, session.comSerialID]);
 
@@ -227,6 +250,8 @@ export function ChatHomeScreen({ session, onBack }: Props) {
         currentUserId={session.userID}
         comSerialID={session.comSerialID}
         canDeleteMessages={canDeleteMessage}
+        canAddMembers={canAddMember}
+        canRemoveMembers={canRemoveMember}
         onBack={() => {
           setSelected(null);
           load(true);
@@ -389,7 +414,7 @@ export function ChatHomeScreen({ session, onBack }: Props) {
                 </View>
               }
               ListHeaderComponent={
-                error ? <Text style={styles.error}>{error}</Text> : null
+                error ? <Text style={styles.error}>{error}</Text> : undefined
               }
               renderItem={({ item }) => (
                 <Pressable style={styles.row} onPress={() => setSelected(item)}>
@@ -433,11 +458,9 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     header: {
-      paddingTop: spacing.xxxl + spacing.md,
-      paddingBottom: spacing.xl,
-      paddingHorizontal: spacing.xl,
-      borderBottomLeftRadius: radius.xl,
-      borderBottomRightRadius: radius.xl,
+      paddingTop: spacing.xxxl,
+      paddingBottom: spacing.md,
+      paddingHorizontal: spacing.lg,
     },
     appBar: {
       flexDirection: 'row',
@@ -459,23 +482,23 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       color: colors.textOnPrimary,
     },
     headerTitle: {
-      ...typography.h1,
+      ...typography.h3,
       color: colors.textOnPrimary,
-      marginTop: spacing.md,
+      marginTop: spacing.xs,
     },
     headerSubtitle: {
-      ...typography.body,
+      ...typography.caption,
       color: colors.textOnPrimary,
       opacity: 0.85,
-      marginTop: spacing.xs,
+      marginTop: 2,
     },
     listWrap: { flex: 1 },
     loader: { marginTop: spacing.xxl },
     list: {
-      paddingHorizontal: spacing.lg,
-      paddingTop: spacing.md,
-      paddingBottom: spacing.xxxl + spacing.lg,
-      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.lg,
+      gap: spacing.xs,
     },
     emptyWrap: {
       flexGrow: 1,
@@ -498,15 +521,14 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
-      borderRadius: radius.lg,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.md,
-      marginBottom: spacing.sm,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
     },
     avatar: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       backgroundColor: colors.tintPrimary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -523,7 +545,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       gap: spacing.sm,
     },
     rowTitle: {
-      ...typography.title,
+      ...typography.label,
       color: colors.text,
       flex: 1,
     },
@@ -561,13 +583,13 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     formWrap: { flex: 1 },
     form: {
-      padding: spacing.xl,
-      gap: spacing.md,
+      padding: spacing.md,
+      gap: spacing.sm,
     },
     formFooter: {
-      paddingHorizontal: spacing.xl,
+      paddingHorizontal: spacing.md,
       paddingTop: spacing.sm,
-      paddingBottom: spacing.xxxl,
+      paddingBottom: spacing.lg,
     },
     error: {
       ...typography.caption,
@@ -598,7 +620,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       marginLeft: spacing.xs,
     },
     userList: {
-      maxHeight: 280,
+      maxHeight: 220,
       backgroundColor: colors.surface,
       borderRadius: radius.lg,
       borderWidth: 1,

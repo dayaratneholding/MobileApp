@@ -21,11 +21,12 @@ export const HCM_API_URL = `https://hcm.pskerp.com/api/v1/hcm`;    // Resolves t
 export const MOBILE_APP_API_URL = `https://hcm.pskerp.com/api/MobileApp`; // Resolves to: https://hcm.prasuking.com/api/v1/MobileApp
 
 /** Same File Manager host used by DHERPCLIENT (itemscreen / asset uploads) */
-export const FILE_MANAGER_API_URL = 'http://2.24.130.171:5000/api/';
+export const FILE_MANAGER_API_URL = 'https://files.pskerp.com/api/';
 
 /** Chat API (REST + SignalR hub at /hubs/chat) */
-export const CHAT_API_URL = 'http://2.24.130.171:5055';
+export const CHAT_API_URL = 'https://chat.pskerp.com';
 
 /** Face attendance service (enroll, match, and save location with the punch). */
-export const FACE_API_URL = 'http://2.24.130.171:7013';
+export const FACE_API_URL = 'https://facerecognition.pskerp.com';
+
 export const FACE_API_KEY = 'dev-face-key';

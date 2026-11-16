@@ -2,9 +2,9 @@
   "expo": {
     "name": "DH Mobile App",
     "slug": "dh-mobile-app",
-    "version": "1.0.1",
+    "version": "1.0.13",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/new-logo.jpeg",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -18,12 +18,11 @@
     },
     "android": {
       "package": "app.pskerp.com",
-      "versionCode": 2,
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 14,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/psk-logo.png"
       },
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
@@ -31,23 +30,24 @@
       "permissions": [
         "CAMERA",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/psk-logo.png"
     },
     "plugins": [
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance."
+          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance and group chat photos."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance."
+          "cameraPermission": "Allow DH Mobile App to use the camera for face attendance and group chat photos."
         }
       ],
       [
@@ -55,7 +55,17 @@
         {
           "locationWhenInUsePermission": "Allow DH Mobile App to save your location with attendance."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#4F46E5",
+          "defaultChannel": "chat"
+        }
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

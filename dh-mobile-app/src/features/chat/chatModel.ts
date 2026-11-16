@@ -1,4 +1,4 @@
-import type { ChatMessage, MessageType } from '../../types/chat';
+import type { ChatMessage, MessageReaction, MessageType } from '../../types/chat';
 
 export function createMessageId(): string {
   const bytes = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
@@ -26,6 +26,20 @@ function readNullableString(record: Record<string, unknown>, ...keys: string[]):
 }
 
 const MESSAGE_TYPES: MessageType[] = ['Text', 'Image', 'Audio', 'Video', 'File'];
+
+export function parseMessageReactions(value: unknown): MessageReaction[] {
+  if (!Array.isArray(value)) return [];
+  const reactions: MessageReaction[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const userId = readString(record, 'userId', 'UserId');
+    const emoji = readString(record, 'emoji', 'Emoji');
+    if (!userId || !emoji) continue;
+    reactions.push({ userId, emoji });
+  }
+  return reactions;
+}
 
 export function parseChatMessage(raw: unknown): ChatMessage | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -55,7 +69,59 @@ export function parseChatMessage(raw: unknown): ChatMessage | null {
     createdAt: readString(record, 'createdAt', 'CreatedAt'),
     editedAt: readNullableString(record, 'editedAt', 'EditedAt'),
     deletedAt: readNullableString(record, 'deletedAt', 'DeletedAt'),
+    reactions: parseMessageReactions(record.reactions ?? record.Reactions),
   };
+}
+
+export function mentionQuery(text: string, cursor: number): string | null {
+  const before = text.slice(0, Math.max(0, cursor));
+  const at = before.lastIndexOf('@');
+  if (at < 0) return null;
+  if (at > 0 && !/\s/.test(before[at - 1])) return null;
+  const query = before.slice(at + 1);
+  if (/[\s@]/.test(query)) return null;
+  return query;
+}
+
+export function splitMentionParts(
+  body: string,
+  names: string[],
+): { text: string; mention: boolean }[] {
+  if (!body) return [];
+  const known = [...new Set(names.map((name) => name.trim()).filter(Boolean))].sort(
+    (left, right) => right.length - left.length,
+  );
+  const parts: { text: string; mention: boolean }[] = [];
+  let index = 0;
+
+  while (index < body.length) {
+    if (body[index] === '@') {
+      const rest = body.slice(index + 1);
+      const named = known.find((name) => {
+        if (!rest.toLowerCase().startsWith(name.toLowerCase())) return false;
+        const after = rest[name.length];
+        return after == null || /[\s.,!?]/.test(after);
+      });
+      if (named) {
+        parts.push({ text: body.slice(index, index + 1 + named.length), mention: true });
+        index += 1 + named.length;
+        continue;
+      }
+      const word = /^[^\s@]+/.exec(rest);
+      if (word) {
+        parts.push({ text: `@${word[0]}`, mention: true });
+        index += 1 + word[0].length;
+        continue;
+      }
+    }
+
+    const next = body.indexOf('@', index + 1);
+    const end = next === -1 ? body.length : next;
+    parts.push({ text: body.slice(index, end), mention: false });
+    index = end;
+  }
+
+  return parts;
 }
 
 export function messagePreview(message: ChatMessage): string {
@@ -67,10 +133,21 @@ export function messagePreview(message: ChatMessage): string {
   return message.fileName || 'File';
 }
 
+const HAS_TIME_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** Chat timestamps are stored in UTC. A value with no offset is still UTC. */
+export function parseChatInstant(value?: string | null): Date | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const utc = HAS_TIME_ZONE.test(trimmed) ? trimmed : `${trimmed.replace(' ', 'T')}Z`;
+  const date = new Date(utc);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatChatTime(value?: string | null): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseChatInstant(value);
+  if (!date) return '';
 
   const now = new Date();
   const sameDay =
@@ -87,7 +164,7 @@ export function formatChatTime(value?: string | null): string {
 
 export function sortMessages(messages: ChatMessage[]): ChatMessage[] {
   return [...messages].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    (a, b) => (parseChatInstant(a.createdAt)?.getTime() ?? 0) - (parseChatInstant(b.createdAt)?.getTime() ?? 0),
   );
 }
 
