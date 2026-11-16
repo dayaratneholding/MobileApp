@@ -259,9 +259,13 @@ export function ChatThreadScreen({
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const show = Keyboard.addListener(showEvent, (event) => {
-      const windowHeight = Dimensions.get('window').height;
-      const overlap = windowHeight - event.endCoordinates.screenY;
-      setKeyboardLift(Math.max(0, overlap));
+      const placeComposer = () => {
+        const windowHeight = Dimensions.get('window').height;
+        const overlap = windowHeight - event.endCoordinates.screenY;
+        setKeyboardLift(Math.max(0, overlap));
+      };
+      placeComposer();
+      setTimeout(placeComposer, 80);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     });
     const hide = Keyboard.addListener(hideEvent, () => setKeyboardLift(0));
@@ -714,6 +718,8 @@ export function ChatThreadScreen({
     if (isMine(user.userID, currentUserId) || memberIds.has(user.userID.toLowerCase())) return false;
     return matchesMemberQuery(user.userName, user.userID);
   });
+  const visibleChoices = memberQuery ? memberChoices.slice(0, 40) : memberChoices.slice(0, 12);
+  const hiddenChoiceCount = memberChoices.length - visibleChoices.length;
   const canManageMembers = canAddMembers || canRemoveMembers;
 
   const openMemberPicker = () => {
@@ -782,10 +788,10 @@ export function ChatThreadScreen({
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
         <View style={styles.headerRow}>
+          <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
+            <Text style={styles.backText}>←</Text>
+          </Pressable>
           <View style={styles.headerAvatar}>
             <Text style={styles.headerAvatarText}>{initial}</Text>
           </View>
@@ -793,11 +799,13 @@ export function ChatThreadScreen({
             <Text style={styles.title} numberOfLines={1}>
               {group.name || 'Group'}
             </Text>
-            <Text style={styles.subtitle}>Group chat</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              Group chat
+            </Text>
           </View>
           {canManageMembers ? (
             <Pressable style={styles.addMember} onPress={openMemberPicker} hitSlop={8}>
-              <Text style={styles.backText}>{canAddMembers ? '+ Member' : 'Members'}</Text>
+              <Text style={styles.addMemberText}>{canAddMembers ? '+' : '•••'}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -1031,10 +1039,7 @@ export function ChatThreadScreen({
       <View
         style={[
           styles.composer,
-          {
-            marginBottom: keyboardLift,
-            paddingBottom: keyboardLift > 0 ? spacing.sm : spacing.xxl,
-          },
+          { marginBottom: keyboardLift > 0 ? keyboardLift : spacing.xxl },
         ]}
       >
         <Pressable style={styles.attach} onPress={handleAttach} disabled={sending}>
@@ -1123,7 +1128,7 @@ export function ChatThreadScreen({
                     {directory.length === 0 ? 'No people were returned.' : 'No people match that search.'}
                   </Text>
                 ) : (
-                  memberChoices.map((user) => {
+                  visibleChoices.map((user) => {
                     const adding = addingUserId?.toLowerCase() === user.userID.toLowerCase();
                     return (
                       <Pressable
@@ -1141,6 +1146,9 @@ export function ChatThreadScreen({
                     );
                   })
                 )}
+                {hiddenChoiceCount > 0 ? (
+                  <Text style={styles.userEmpty}>Search to see the other {hiddenChoiceCount} people.</Text>
+                ) : null}
               </>
             ) : null}
           </ScrollView>
@@ -1167,26 +1175,32 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       backgroundColor: colors.background,
     },
     header: {
-      paddingTop: spacing.xxxl + spacing.md,
-      paddingBottom: spacing.xxl,
-      paddingHorizontal: spacing.xl,
-      borderBottomLeftRadius: radius.xl,
-      borderBottomRightRadius: radius.xl,
+      paddingTop: spacing.xxxl,
+      paddingBottom: spacing.md,
+      paddingHorizontal: spacing.md,
     },
     backBtn: {
-      alignSelf: 'flex-start',
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-      borderRadius: radius.pill,
-      marginBottom: spacing.md,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: spacing.xs,
     },
     addMember: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: 'rgba(255,255,255,0.2)',
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-      borderRadius: radius.pill,
       marginLeft: spacing.sm,
+    },
+    addMemberText: {
+      color: colors.textOnPrimary,
+      fontSize: 20,
+      fontWeight: '700',
+      lineHeight: 22,
     },
     backText: {
       ...typography.label,
@@ -1197,21 +1211,21 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       alignItems: 'center',
     },
     headerAvatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       backgroundColor: 'rgba(255,255,255,0.22)',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: spacing.sm,
     },
     headerAvatarText: {
-      ...typography.title,
+      ...typography.label,
       color: colors.textOnPrimary,
     },
     headerBody: { flex: 1 },
     title: {
-      ...typography.h3,
+      ...typography.title,
       color: colors.textOnPrimary,
     },
     subtitle: {
@@ -1221,15 +1235,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     panel: {
       flex: 1,
-      marginHorizontal: spacing.md,
-      marginTop: -spacing.lg,
-      marginBottom: spacing.sm,
       backgroundColor: colors.background,
-      borderRadius: radius.xl,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: 'hidden',
-      ...shadow.card,
     },
     loader: { marginTop: spacing.xxl },
     earlier: { marginVertical: spacing.sm },
@@ -1417,8 +1423,8 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       marginRight: spacing.md,
     },
     photo: {
-      width: 220,
-      height: 160,
+      width: 168,
+      height: 120,
       borderRadius: 14,
       backgroundColor: 'rgba(0,0,0,0.08)',
     },
@@ -1463,7 +1469,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       marginBottom: spacing.md,
     },
     memberTitle: {
-      ...typography.h3,
+      ...typography.title,
       color: colors.text,
     },
     memberClose: {
@@ -1593,64 +1599,62 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     composer: {
       flexDirection: 'row',
-      alignItems: 'flex-end',
-      marginHorizontal: spacing.md,
-      marginTop: spacing.sm,
-      paddingHorizontal: spacing.sm,
-      paddingTop: spacing.sm,
+      alignItems: 'center',
+      marginHorizontal: spacing.sm,
+      paddingHorizontal: spacing.xs,
+      paddingVertical: spacing.xs,
       backgroundColor: colors.surface,
-      borderRadius: 28,
+      borderRadius: 24,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     attach: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.tintPrimary,
-      marginRight: spacing.sm,
-      marginBottom: 1,
+      marginRight: spacing.xs,
     },
     attachText: {
-      fontSize: 26,
-      lineHeight: 28,
+      fontSize: 22,
+      lineHeight: 24,
       color: colors.primary,
       marginTop: -1,
     },
     cameraText: {
-      fontSize: 18,
-      lineHeight: 22,
+      fontSize: 16,
+      lineHeight: 18,
     },
     input: {
       flex: 1,
-      minHeight: 42,
-      maxHeight: 120,
+      minHeight: 34,
+      maxHeight: 96,
       borderRadius: 21,
       backgroundColor: colors.inputBg,
       color: colors.text,
-      paddingHorizontal: spacing.lg,
-      paddingTop: Platform.OS === 'ios' ? 10 : 8,
-      paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+      paddingHorizontal: spacing.md,
+      paddingTop: Platform.OS === 'ios' ? 7 : 0,
+      paddingBottom: Platform.OS === 'ios' ? 7 : 0,
+      textAlignVertical: 'center',
       ...typography.body,
     },
     send: {
-      width: 42,
-      height: 42,
-      marginLeft: spacing.sm,
-      marginBottom: 1,
+      width: 34,
+      height: 34,
+      marginLeft: spacing.xs,
       backgroundColor: colors.primary,
-      borderRadius: 21,
+      borderRadius: 17,
       alignItems: 'center',
       justifyContent: 'center',
     },
     sendDisabled: { opacity: 0.4 },
     sendText: {
       color: colors.textOnPrimary,
-      fontSize: 22,
+      fontSize: 18,
       fontWeight: '700',
-      lineHeight: 24,
+      lineHeight: 20,
       marginTop: -1,
     },
   });
