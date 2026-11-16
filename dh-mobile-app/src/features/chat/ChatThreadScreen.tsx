@@ -30,6 +30,8 @@ import {
 } from '../../api/client/fileManagerClient';
 import { getApiErrorMessage } from '../../api/client/client';
 import {
+  addGroupMember,
+  removeGroupMember,
   deleteMessage,
   listGroupMembers,
   listMessages,
@@ -38,7 +40,8 @@ import {
   setMessageReaction,
   type GroupMember,
 } from '../../api/endpoints/chat';
-import { getAllUsers } from '../../api/endpoints/users';
+import { getAllUsers, type CoreUser } from '../../api/endpoints/users';
+import { TextField } from '../../components/ui/TextField';
 import { ensureChatHub } from '../../services/chatHub';
 import {
   radius,
@@ -68,6 +71,8 @@ type Props = {
   currentUserId: string;
   comSerialID: number;
   canDeleteMessages: boolean;
+  canAddMembers: boolean;
+  canRemoveMembers: boolean;
   onBack: () => void;
 };
 
@@ -163,6 +168,24 @@ async function loadGroupHistory(groupId: string): Promise<{ messages: LocalMessa
   return { messages: sortMessages(collected), hasMore };
 }
 
+/** Used when the chat server cannot return the member list. People who have written are still members. */
+async function knownSenderIds(groupId: string): Promise<string[]> {
+  const seen = new Set<string>();
+  let before: string | undefined;
+  for (let page = 0; page < 8; page += 1) {
+    const batch = readPage(await listMessages(groupId, before, 50));
+    if (batch.length === 0) break;
+    for (const message of batch) {
+      const senderId = message.senderId.trim();
+      if (senderId) seen.add(senderId);
+    }
+    const oldest = sortMessages(batch)[0]?.createdAt?.trim().replace(' ', 'T');
+    if (batch.length < 50 || !oldest || oldest === before) break;
+    before = oldest;
+  }
+  return [...seen];
+}
+
 function isImageMessage(message: { type: MessageType; fileName?: string | null }): boolean {
   if (message.type === 'Image') return true;
   return /\.(jpe?g|png|gif|webp)$/i.test(message.fileName || '');
@@ -195,6 +218,8 @@ export function ChatThreadScreen({
   currentUserId,
   comSerialID,
   canDeleteMessages,
+  canAddMembers,
+  canRemoveMembers,
   onBack,
 }: Props) {
   const { colors } = useTheme();
@@ -207,11 +232,19 @@ export function ChatThreadScreen({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ uri: string; name: string } | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [membersFromServer, setMembersFromServer] = useState(false);
+  const [hiddenMemberIds, setHiddenMemberIds] = useState<string[]>([]);
   const [nameById, setNameById] = useState<Record<string, string>>({});
   const [cursor, setCursor] = useState(0);
   const [keyboardLift, setKeyboardLift] = useState(0);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [reactionTarget, setReactionTarget] = useState<string | null>(null);
+  const [memberOpen, setMemberOpen] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const [directory, setDirectory] = useState<CoreUser[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [addingUserId, setAddingUserId] = useState<string | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const lastTapRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<LocalMessage>>(null);
@@ -302,6 +335,31 @@ export function ChatThreadScreen({
         if (!active) return;
         const byId = new Map(users.map((user) => [user.userID.toLowerCase(), user.userName || user.userID]));
         setNameById(Object.fromEntries(byId));
+        if (!listed) {
+          setMembersFromServer(false);
+          const self = currentUserId.trim();
+          if (self) {
+            setMembers((current) => {
+              if (current.some((item) => item.userID.toLowerCase() === self.toLowerCase())) return current;
+              return [...current, { userID: self, userName: byId.get(self.toLowerCase()) || self }];
+            });
+          }
+          knownSenderIds(group.id)
+            .then((ids) => {
+              if (!active) return;
+              setMembers((current) => {
+                const merged = new Map(current.map((item) => [item.userID.toLowerCase(), item]));
+                for (const id of ids) {
+                  const key = id.toLowerCase();
+                  if (merged.has(key)) continue;
+                  merged.set(key, { userID: id, userName: byId.get(key) || id });
+                }
+                return [...merged.values()];
+              });
+            })
+            .catch(() => undefined);
+          return;
+        }
         const merged = new Map<string, GroupMember>();
         for (const member of listed) {
           const key = member.userID.toLowerCase();
@@ -310,13 +368,14 @@ export function ChatThreadScreen({
             userName: byId.get(key) || member.userName || member.userID,
           });
         }
+        setMembersFromServer(true);
         setMembers([...merged.values()]);
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [group.id]);
+  }, [currentUserId, group.id]);
 
   useEffect(() => {
     let hub: HubConnection | null = null;
@@ -568,6 +627,8 @@ export function ChatThreadScreen({
     ]);
   };
 
+  
+
   const mentionPeople = (() => {
     const byId = new Map<string, GroupMember>();
     for (const member of members) {
@@ -612,6 +673,105 @@ export function ChatThreadScreen({
 
   const initial = (group.name || 'G').slice(0, 1).toUpperCase();
   const canSend = Boolean(draft.trim()) && !sending;
+  const memberQuery = userQuery.trim().toLowerCase();
+  const matchesMemberQuery = (userName: string, userID: string) => {
+    if (!memberQuery) return true;
+    return userName.toLowerCase().includes(memberQuery) || userID.toLowerCase().includes(memberQuery);
+  };
+  const hiddenIds = new Set(hiddenMemberIds.map((userID) => userID.toLowerCase()));
+  const groupRoster = (() => {
+    const byId = new Map<string, GroupMember>();
+    const addPerson = (userID: string, userName?: string | null) => {
+      const id = userID.trim();
+      if (!id) return;
+      const key = id.toLowerCase();
+      if (hiddenIds.has(key)) return;
+      const known = byId.get(key);
+      const resolved = userName?.trim() || nameById[key] || known?.userName || id;
+      if (!known || known.userName === known.userID) {
+        byId.set(key, { userID: known?.userID || id, userName: resolved });
+      }
+    };
+
+    if (membersFromServer) {
+      for (const member of members) addPerson(member.userID, member.userName);
+    } else {
+      addPerson(currentUserId, nameById[currentUserId.toLowerCase()]);
+      for (const member of members) addPerson(member.userID, member.userName);
+      for (const message of messages) {
+        if (message.senderId) addPerson(message.senderId);
+        for (const reaction of message.reactions ?? []) {
+          if (reaction.userId) addPerson(reaction.userId);
+        }
+      }
+    }
+
+    return [...byId.values()].sort((left, right) => left.userName.localeCompare(right.userName));
+  })();
+  const memberIds = new Set(groupRoster.map((member) => member.userID.toLowerCase()));
+  const listedMembers = groupRoster.filter((member) => matchesMemberQuery(member.userName, member.userID));
+  const memberChoices = directory.filter((user) => {
+    if (isMine(user.userID, currentUserId) || memberIds.has(user.userID.toLowerCase())) return false;
+    return matchesMemberQuery(user.userName, user.userID);
+  });
+  const canManageMembers = canAddMembers || canRemoveMembers;
+
+  const openMemberPicker = () => {
+    if (!canManageMembers) return;
+    setMemberOpen(true);
+    setUserQuery('');
+    if (!canAddMembers || directory.length > 0 || directoryLoading) return;
+    setDirectoryLoading(true);
+    getAllUsers()
+      .then(setDirectory)
+      .catch((err) => Alert.alert('People not loaded', getApiErrorMessage(err)))
+      .finally(() => setDirectoryLoading(false));
+  };
+
+  const handleAddMember = (user: CoreUser) => {
+    if (!canAddMembers || addingUserId) return;
+    setAddingUserId(user.userID);
+    addGroupMember(group.id, user.userID)
+      .then(() => {
+        setMembers((current) => {
+          if (current.some((member) => member.userID.toLowerCase() === user.userID.toLowerCase())) {
+            return current;
+          }
+          return [...current, { userID: user.userID, userName: user.userName || user.userID }];
+        });
+        setNameById((current) => ({
+          ...current,
+          [user.userID.toLowerCase()]: user.userName || user.userID,
+        }));
+      })
+      .catch((err) => Alert.alert('Member not added', getApiErrorMessage(err)))
+      .finally(() => setAddingUserId(null));
+  };
+
+  const handleRemoveMember = (member: GroupMember) => {
+    if (!canRemoveMembers || addingUserId || removingUserId || isMine(member.userID, currentUserId)) return;
+    const label = member.userName || member.userID;
+    Alert.alert('Remove member', `Remove ${label} from this group?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          setRemovingUserId(member.userID);
+          removeGroupMember(group.id, member.userID)
+            .then(() => {
+              const key = member.userID.toLowerCase();
+              setHiddenMemberIds((current) => (current.includes(key) ? current : [...current, key]));
+              setMembers((current) =>
+                current.filter((item) => item.userID.toLowerCase() !== key),
+              );
+            })
+            .catch((err) => Alert.alert('Member not removed', getApiErrorMessage(err)))
+            .finally(() => setRemovingUserId(null));
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
@@ -635,6 +795,11 @@ export function ChatThreadScreen({
             </Text>
             <Text style={styles.subtitle}>Group chat</Text>
           </View>
+          {canManageMembers ? (
+            <Pressable style={styles.addMember} onPress={openMemberPicker} hitSlop={8}>
+              <Text style={styles.backText}>{canAddMembers ? '+ Member' : 'Members'}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </LinearGradient>
 
@@ -898,6 +1063,89 @@ export function ChatThreadScreen({
           <Text style={styles.sendText}>↑</Text>
         </Pressable>
       </View>
+      <Modal visible={memberOpen} animationType="slide" onRequestClose={() => setMemberOpen(false)}>
+        <View style={styles.memberScreen}>
+          <View style={styles.memberHeader}>
+            <Text style={styles.memberTitle}>Members</Text>
+            <Pressable onPress={() => setMemberOpen(false)} hitSlop={8}>
+              <Text style={styles.memberClose}>Close</Text>
+            </Pressable>
+          </View>
+          <TextField
+            label="Search people"
+            value={userQuery}
+            onChangeText={setUserQuery}
+            placeholder="Search by name or user id"
+            autoCapitalize="none"
+          />
+          <ScrollView keyboardShouldPersistTaps="handled" style={styles.memberList}>
+            {canRemoveMembers ? (
+              <>
+                <Text style={styles.memberSection}>In this group</Text>
+                {listedMembers.length === 0 ? (
+                  <Text style={styles.userEmpty}>
+                    {groupRoster.length === 0 ? 'No members were returned.' : 'No members match that search.'}
+                  </Text>
+                ) : (
+                  listedMembers.map((member) => {
+                    const mine = isMine(member.userID, currentUserId);
+                    const removing = removingUserId?.toLowerCase() === member.userID.toLowerCase();
+                    return (
+                      <View key={member.userID} style={styles.userRow}>
+                        <View style={styles.userBody}>
+                          <Text style={styles.userName}>{member.userName}</Text>
+                          <Text style={styles.userId}>{member.userID}</Text>
+                        </View>
+                        {mine ? (
+                          <Text style={styles.userId}>You</Text>
+                        ) : (
+                          <Pressable
+                            onPress={() => handleRemoveMember(member)}
+                            disabled={Boolean(removingUserId || addingUserId)}
+                            hitSlop={8}
+                          >
+                            <Text style={styles.userRemove}>{removing ? 'Removing…' : 'Remove'}</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })
+                )}
+              </>
+            ) : null}
+            {canAddMembers ? (
+              <>
+                <Text style={styles.memberSection}>Add people</Text>
+                {directoryLoading ? (
+                  <ActivityIndicator color={colors.primary} style={styles.userEmpty} />
+                ) : memberChoices.length === 0 ? (
+                  <Text style={styles.userEmpty}>
+                    {directory.length === 0 ? 'No people were returned.' : 'No people match that search.'}
+                  </Text>
+                ) : (
+                  memberChoices.map((user) => {
+                    const adding = addingUserId?.toLowerCase() === user.userID.toLowerCase();
+                    return (
+                      <Pressable
+                        key={user.userID}
+                        style={styles.userRow}
+                        onPress={() => handleAddMember(user)}
+                        disabled={Boolean(addingUserId || removingUserId)}
+                      >
+                        <View style={styles.userBody}>
+                          <Text style={styles.userName}>{user.userName}</Text>
+                          <Text style={styles.userId}>{user.userID}</Text>
+                        </View>
+                        <Text style={styles.userMark}>{adding ? 'Adding…' : 'Add'}</Text>
+                      </Pressable>
+                    );
+                  })
+                )}
+              </>
+            ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
       <Modal visible={viewer !== null} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
         <View style={styles.viewer}>
           <Pressable style={styles.viewerClose} onPress={() => setViewer(null)}>
@@ -932,6 +1180,13 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       paddingVertical: spacing.sm,
       borderRadius: radius.pill,
       marginBottom: spacing.md,
+    },
+    addMember: {
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      marginLeft: spacing.sm,
     },
     backText: {
       ...typography.label,
@@ -1194,6 +1449,66 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       color: '#FFFFFF',
       fontSize: 11,
       fontWeight: '800',
+    },
+    memberScreen: {
+      flex: 1,
+      backgroundColor: colors.background,
+      paddingTop: spacing.xxxl,
+      paddingHorizontal: spacing.lg,
+    },
+    memberHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing.md,
+    },
+    memberTitle: {
+      ...typography.h3,
+      color: colors.text,
+    },
+    memberClose: {
+      ...typography.label,
+      color: colors.primary,
+    },
+    memberList: { flex: 1 },
+    memberSection: {
+      ...typography.caption,
+      color: colors.textMuted,
+      fontWeight: '700',
+      marginTop: spacing.md,
+      marginBottom: spacing.xs,
+    },
+    userEmpty: {
+      ...typography.body,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: spacing.xl,
+    },
+    userRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    userBody: { flex: 1 },
+    userName: {
+      ...typography.label,
+      color: colors.text,
+    },
+    userId: {
+      ...typography.caption,
+      color: colors.textMuted,
+    },
+    userMark: {
+      ...typography.label,
+      color: colors.primary,
+      marginLeft: spacing.sm,
+    },
+    userRemove: {
+      ...typography.label,
+      color: colors.danger,
+      marginLeft: spacing.sm,
     },
     viewer: {
       flex: 1,

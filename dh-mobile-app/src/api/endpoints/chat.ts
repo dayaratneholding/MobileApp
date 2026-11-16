@@ -53,12 +53,13 @@ function parseGroupMembers(body: unknown): GroupMember[] {
   return members;
 }
 
-export async function listGroupMembers(groupId: string): Promise<GroupMember[]> {
+/** Null means the chat server has no member list yet. An empty array means the group has no members. */
+export async function listGroupMembers(groupId: string): Promise<GroupMember[] | null> {
   try {
     const body = await chatRequest<unknown>(`/groups/${groupId}/members`);
     return parseGroupMembers(body);
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -66,6 +67,12 @@ export function addGroupMember(groupId: string, userId: string): Promise<void> {
   return chatRequest<void>(`/groups/${groupId}/members`, {
     method: 'POST',
     body: JSON.stringify({ userId }),
+  });
+}
+
+export function removeGroupMember(groupId: string, userId: string): Promise<void> {
+  return chatRequest<void>(`/groups/${groupId}/members/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
   });
 }
 

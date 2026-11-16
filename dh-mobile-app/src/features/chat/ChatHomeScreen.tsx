@@ -250,6 +250,8 @@ export function ChatHomeScreen({ session, onBack }: Props) {
         currentUserId={session.userID}
         comSerialID={session.comSerialID}
         canDeleteMessages={canDeleteMessage}
+        canAddMembers={canAddMember}
+        canRemoveMembers={canRemoveMember}
         onBack={() => {
           setSelected(null);
           load(true);
