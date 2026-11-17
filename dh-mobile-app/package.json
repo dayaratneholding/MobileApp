@@ -1,6 +1,6 @@
 {
   "name": "dh-mobile-app",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "main": "index.ts",
   "dependencies": {
     "@microsoft/signalr": "^10.0.11",

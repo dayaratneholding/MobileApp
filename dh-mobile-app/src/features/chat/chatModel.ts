@@ -124,9 +124,40 @@ export function splitMentionParts(
   return parts;
 }
 
+export type MessageReply = {
+  messageId: string;
+  senderName: string;
+  preview: string;
+};
+
+function oneLine(value: string, max: number): string {
+  return value.replace(/[\r\n]/g, ' ').trim().slice(0, max);
+}
+
+/** The live chat API stores one text body, so the quoted message travels with the reply. */
+export function encodeReply(text: string, reply: MessageReply): string {
+  const senderName = oneLine(reply.senderName, 40) || 'Member';
+  const preview = oneLine(reply.preview, 80) || 'Message';
+  return `↩ ${senderName}: ${preview}\n↩↩${reply.messageId}\n${text}`;
+}
+
+export function readReply(body?: string | null): { reply: MessageReply | null; text: string } {
+  const value = body || '';
+  const match = /^↩ ([^:\n]+): ([^\n]*)\n↩↩([^\n]+)\n([\s\S]*)$/.exec(value);
+  if (!match) return { reply: null, text: value };
+  return {
+    reply: {
+      senderName: match[1].trim(),
+      preview: match[2].trim() || 'Message',
+      messageId: match[3].trim(),
+    },
+    text: match[4],
+  };
+}
+
 export function messagePreview(message: ChatMessage): string {
   if (message.deletedAt) return 'Message deleted';
-  if (message.type === 'Text') return message.body?.trim() || 'Message';
+  if (message.type === 'Text') return readReply(message.body).text.trim() || 'Message';
   if (message.type === 'Image') return 'Photo';
   if (message.type === 'Audio') return 'Voice note';
   if (message.type === 'Video') return 'Video';

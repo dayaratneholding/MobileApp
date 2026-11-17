@@ -55,8 +55,10 @@ import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { ChatMessage, GroupSummary, MessageType } from '../../types/chat';
 import {
   createMessageId,
+  encodeReply,
   mentionQuery,
   messagePreview,
+  readReply,
   parseChatInstant,
   parseChatMessage,
   parseMessageReactions,
@@ -239,6 +241,7 @@ export function ChatThreadScreen({
   const [keyboardLift, setKeyboardLift] = useState(0);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [reactionTarget, setReactionTarget] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<LocalMessage | null>(null);
   const [memberOpen, setMemberOpen] = useState(false);
   const [userQuery, setUserQuery] = useState('');
   const [directory, setDirectory] = useState<CoreUser[]>([]);
@@ -248,6 +251,7 @@ export function ChatThreadScreen({
   const lastTapRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<LocalMessage>>(null);
+  const inputRef = useRef<TextInput>(null);
   const stickToEnd = useRef(true);
   const hasMore = useRef(false);
   const loadingOlder = useRef(false);
@@ -460,11 +464,31 @@ export function ChatThreadScreen({
     }
   };
 
+  const startReply = (message: LocalMessage) => {
+    setReactionTarget(null);
+    setReplyTo(message);
+    setTimeout(() => inputRef.current?.focus(), 120);
+  };
+
+  const personName = (userId: string) => {
+    if (isMine(userId, currentUserId)) return 'You';
+    return nameById[userId.toLowerCase()] || userId;
+  };
+
   const handleSend = async () => {
-    const body = draft.trim();
-    if (!body || sending) return;
+    const text = draft.trim();
+    if (!text || sending) return;
+    const quoted = replyTo;
+    const body = quoted
+      ? encodeReply(text, {
+          messageId: quoted.id,
+          senderName: personName(quoted.senderId),
+          preview: messagePreview(quoted),
+        })
+      : text;
     stickToEnd.current = true;
     setDraft('');
+    setReplyTo(null);
     await publish({ id: createMessageId(), type: 'Text', body });
   };
 
@@ -824,6 +848,12 @@ export function ChatThreadScreen({
           keyboardShouldPersistTaps="handled"
           maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
           scrollEventThrottle={200}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }}
           onScroll={(event) => {
             const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
             const distanceFromEnd =
@@ -899,6 +929,12 @@ export function ChatThreadScreen({
                           <Text style={styles.reactionChoiceText}>{emoji}</Text>
                         </Pressable>
                       ))}
+                      <Pressable
+                        style={styles.reactionChoice}
+                        onPress={() => startReply(item)}
+                      >
+                        <Text style={styles.reactionReply}>Reply</Text>
+                      </Pressable>
                       {mine && canDeleteMessages ? (
                         <Pressable style={styles.reactionChoice} onPress={() => handleDelete(item)}>
                           <Text style={styles.reactionDelete}>Delete</Text>
@@ -955,22 +991,43 @@ export function ChatThreadScreen({
                         </View>
                       </View>
                     ) : (
-                      <Text style={[styles.bubbleText, mine ? styles.mineText : styles.theirText, deleted && styles.deletedText]}>
-                        {deleted
-                          ? 'Message deleted'
-                          : splitMentionParts(messagePreview(item), mentionNames).map((part, partIndex) =>
-                              part.mention ? (
-                                <Text
-                                  key={`${item.id}-m-${partIndex}`}
-                                  style={mine ? styles.mineMention : styles.theirMention}
-                                >
-                                  {part.text}
-                                </Text>
-                              ) : (
-                                part.text
-                              ),
-                            )}
-                      </Text>
+                      <View>
+                        {!deleted && readReply(item.body).reply ? (
+                          <Pressable
+                            style={[styles.replyQuote, mine ? styles.replyQuoteMine : styles.replyQuoteTheirs]}
+                            onPress={() => {
+                              const targetId = readReply(item.body).reply?.messageId;
+                              const index = messages.findIndex((message) => message.id === targetId);
+                              if (index >= 0) {
+                                listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.4 });
+                              }
+                            }}
+                          >
+                            <Text style={[styles.replyName, mine ? styles.mineText : styles.theirMention]} numberOfLines={1}>
+                              {readReply(item.body).reply?.senderName}
+                            </Text>
+                            <Text style={[styles.replyPreview, mine ? styles.mineTime : styles.theirTime]} numberOfLines={2}>
+                              {readReply(item.body).reply?.preview}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                        <Text style={[styles.bubbleText, mine ? styles.mineText : styles.theirText, deleted && styles.deletedText]}>
+                          {deleted
+                            ? 'Message deleted'
+                            : splitMentionParts(readReply(item.body).text || messagePreview(item), mentionNames).map((part, partIndex) =>
+                                part.mention ? (
+                                  <Text
+                                    key={`${item.id}-m-${partIndex}`}
+                                    style={mine ? styles.mineMention : styles.theirMention}
+                                  >
+                                    {part.text}
+                                  </Text>
+                                ) : (
+                                  part.text
+                                ),
+                              )}
+                        </Text>
+                      </View>
                     )}
                     {attachment && isImageMessage(item) && item.status !== 'sending' && item.status !== 'failed' ? null : (
                       <Text style={[styles.time, mine ? styles.mineTime : styles.theirTime]}>
@@ -1037,11 +1094,27 @@ export function ChatThreadScreen({
       ) : null}
 
       <View
-        style={[
-          styles.composer,
-          { marginBottom: keyboardLift > 0 ? keyboardLift : spacing.xxl },
-        ]}
+        style={{
+          marginBottom:
+            keyboardLift > 0 ? keyboardLift : Platform.OS === 'android' ? 48 : spacing.sm,
+        }}
       >
+      {replyTo ? (
+        <View style={styles.replyComposer}>
+          <View style={styles.replyComposerBody}>
+            <Text style={styles.replyComposerName} numberOfLines={1}>
+              {personName(replyTo.senderId)}
+            </Text>
+            <Text style={styles.replyComposerText} numberOfLines={1}>
+              {messagePreview(replyTo)}
+            </Text>
+          </View>
+          <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
+            <Text style={styles.replyComposerClose}>×</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <View style={styles.composer}>
         <Pressable style={styles.attach} onPress={handleAttach} disabled={sending}>
           <Text style={styles.attachText}>+</Text>
         </Pressable>
@@ -1049,7 +1122,9 @@ export function ChatThreadScreen({
           <Text style={styles.cameraText}>📷</Text>
         </Pressable>
         <TextInput
+          ref={inputRef}
           style={styles.input}
+          showSoftInputOnFocus
           value={draft}
           onChangeText={(text) => {
             setDraft(text);
@@ -1067,6 +1142,7 @@ export function ChatThreadScreen({
         >
           <Text style={styles.sendText}>↑</Text>
         </Pressable>
+      </View>
       </View>
       <Modal visible={memberOpen} animationType="slide" onRequestClose={() => setMemberOpen(false)}>
         <View style={styles.memberScreen}>
@@ -1315,6 +1391,61 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       ...typography.caption,
       color: colors.danger,
       fontWeight: '700',
+    },
+    reactionReply: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    replyQuote: {
+      borderLeftWidth: 3,
+      borderRadius: 6,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      marginBottom: spacing.xs,
+    },
+    replyQuoteMine: {
+      borderLeftColor: colors.textOnPrimary,
+      backgroundColor: 'rgba(255,255,255,0.16)',
+    },
+    replyQuoteTheirs: {
+      borderLeftColor: colors.primary,
+      backgroundColor: colors.tintPrimary,
+    },
+    replyName: {
+      ...typography.caption,
+      fontWeight: '700',
+    },
+    replyPreview: {
+      ...typography.caption,
+      marginTop: 2,
+    },
+    replyComposer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: spacing.sm,
+      marginBottom: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
+    },
+    replyComposerBody: { flex: 1 },
+    replyComposerName: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    replyComposerText: {
+      ...typography.caption,
+      color: colors.textSecondary,
+    },
+    replyComposerClose: {
+      ...typography.title,
+      color: colors.textMuted,
+      marginLeft: spacing.sm,
     },
     reactionRow: {
       flexDirection: 'row',
