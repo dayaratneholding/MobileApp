@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -25,7 +26,7 @@ import {
   formatAttendanceDate,
   formatAttendanceTime,
 } from '../../types/attendance';
-import { parseUserDateFilter } from '../../utils/leaveDates';
+import { parseUserDateFilter, toDateKey } from '../../utils/leaveDates';
 
 type Props = {
   session: AuthSession;
@@ -35,6 +36,13 @@ type Props = {
 const LAST_N = 10;
 /** Fetch a larger company page so we can pick this employee's latest records. */
 const FETCH_PAGE_SIZE = 100;
+
+function attendanceDay(value?: string | null): string {
+  if (!value) return '';
+  const prefix = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (prefix) return prefix[1];
+  return toDateKey(value) ?? '';
+}
 
 function sortByDateDesc(items: AttendanceListItem[]): AttendanceListItem[] {
   return [...items].sort((a, b) => {
@@ -111,8 +119,7 @@ export function ViewAttendanceScreen({ session, onBack }: Props) {
     const sorted = sortByDateDesc(allItems);
 
     if (appliedDate) {
-      // Date filter: only that day
-      return sorted.filter((item) => item.dateIn === appliedDate);
+      return sorted.filter((item) => attendanceDay(item.dateIn) === appliedDate);
     }
 
     // Default: last 10 attendance records
@@ -140,21 +147,55 @@ export function ViewAttendanceScreen({ session, onBack }: Props) {
     }
   }, [eeSerialID, eeid]);
 
-  const loadAttendance = useCallback(async () => {
+  const loadAttendance = useCallback(async (dateKey?: string | null) => {
     if (!eeSerialID) {
       throw new Error('Employee ID not found in session. Please login again.');
     }
 
     const resolvedEeid = await ensureEeid();
+    const target = dateKey?.trim() || null;
 
-    // Walk a few pages until we have enough employee records for "last 10"
-    // (company-wide paging may not put this employee on page 1).
     const collected: AttendanceListItem[] = [];
     const seen = new Set<string>();
+    const take = (items: AttendanceListItem[]) => {
+      for (const item of items) {
+        if (target && attendanceDay(item.dateIn) !== target) continue;
+        const key = String(
+          item.attendanceSerialID ??
+            item.id ??
+            `${item.dateIn}-${item.timeIn}-${item.eeid}`,
+        );
+        if (seen.has(key)) continue;
+        seen.add(key);
+        collected.push(item);
+      }
+    };
+
+    if (target) {
+      const byDate = await getAttendancePaged({
+        ComSerialID: session.comSerialID,
+        PageNumber: 1,
+        PageSize: FETCH_PAGE_SIZE,
+        SortColumn: 'dateIn',
+        SortDirection: 'desc',
+        Filter: target,
+        eeid: resolvedEeid ?? undefined,
+        eeSerialID,
+        EESerialID: eeSerialID,
+        EEID: resolvedEeid ?? undefined,
+      });
+      take(byDate.items);
+      if (collected.length > 0) {
+        setAllItems(sortByDateDesc(collected));
+        return;
+      }
+    }
+
     let page = 1;
     let hasNext = true;
+    const maxPages = target ? 20 : 5;
 
-    while (hasNext && page <= 5 && collected.length < 40) {
+    while (hasNext && page <= maxPages) {
       const result = await getAttendancePaged({
         ComSerialID: session.comSerialID,
         PageNumber: page,
@@ -168,26 +209,16 @@ export function ViewAttendanceScreen({ session, onBack }: Props) {
         EEID: resolvedEeid ?? undefined,
       });
 
-      for (const item of result.items) {
-        const key = String(
-          item.attendanceSerialID ??
-            item.id ??
-            `${item.dateIn}-${item.timeIn}-${item.eeid}`,
-        );
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        collected.push(item);
+      take(result.items);
+
+      const days = result.items.map((item) => attendanceDay(item.dateIn)).filter(Boolean);
+      const passedTarget = Boolean(target && days.length > 0 && days.every((day) => day < target));
+      if (passedTarget || (!target && collected.length >= LAST_N * 3)) {
+        break;
       }
 
       hasNext = result.hasNextPage;
       page += 1;
-
-      // Enough for last 10 after sort
-      if (collected.length >= LAST_N * 3) {
-        break;
-      }
     }
 
     setAllItems(sortByDateDesc(collected));
@@ -210,7 +241,7 @@ export function ViewAttendanceScreen({ session, onBack }: Props) {
     loadInitial();
   }, [loadInitial]);
 
-  const handleApplyDateFilter = () => {
+  const handleApplyDateFilter = async () => {
     const trimmed = dateFilter.trim();
     if (!trimmed) {
       setAppliedDate(null);
@@ -224,22 +255,39 @@ export function ViewAttendanceScreen({ session, onBack }: Props) {
       return;
     }
 
+    Keyboard.dismiss();
     setError('');
     setDateFilter(parsed);
     setAppliedDate(parsed);
+    setLoading(true);
+    try {
+      await loadAttendance(parsed);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+      setAllItems([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleClearDateFilter = () => {
     setDateFilter('');
     setAppliedDate(null);
     setError('');
+    setLoading(true);
+    loadAttendance(null)
+      .catch((err) => {
+        setError(getApiErrorMessage(err));
+        setAllItems([]);
+      })
+      .finally(() => setLoading(false));
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     setError('');
     try {
-      await loadAttendance();
+      await loadAttendance(appliedDate);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {

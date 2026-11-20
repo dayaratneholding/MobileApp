@@ -251,7 +251,7 @@ export function ChatThreadScreen({
   const lastTapRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<LocalMessage>>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const stickToEnd = useRef(true);
   const hasMore = useRef(false);
   const loadingOlder = useRef(false);
