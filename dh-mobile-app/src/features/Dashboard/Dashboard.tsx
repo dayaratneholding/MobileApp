@@ -42,6 +42,7 @@ import { ensureChatHub, stopChatHub } from '../../services/chatHub';
 import { parseChatMessage } from '../chat/chatModel';
 import { ChatHomeScreen } from '../chat/ChatHomeScreen';
 import { FaceCheckInScreen } from '../face/FaceCheckInScreen';
+import { GatePassScreen } from '../GatePass/GatePassScreen';
 
 type Props = {
   session: AuthSession;
@@ -177,7 +178,7 @@ export function Dashboard({ session, onLogout }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [activeScreen, setActiveScreen] = useState<
-    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines' | 'chat' | 'face'
+    'main' | 'leave' | 'salary-advance' | 'payslip' | 'attendance' | 'machines' | 'chat' | 'face' | 'gatepass'
   >('main');
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
   const [leaveRemaining, setLeaveRemaining] = useState<number | null>(null);
@@ -417,6 +418,15 @@ export function Dashboard({ session, onLogout }: Props) {
         tint: colors.tintPrimary,
         accent: colors.primary,
       },
+      {
+        key: 'gatepass',
+        title: 'GatePass',
+        subtitle: 'Entry & exit passes',
+        value: 'Open',
+        emoji: '🪪',
+        tint: colors.tintWarning,
+        accent: colors.warning,
+      },
     ],
     [
       attendance?.attendanceCount,
@@ -481,6 +491,15 @@ export function Dashboard({ session, onLogout }: Props) {
   if (activeScreen === 'chat') {
     return (
       <ChatHomeScreen
+        session={session}
+        onBack={() => setActiveScreen('main')}
+      />
+    );
+  }
+
+  if (activeScreen === 'gatepass') {
+    return (
+      <GatePassScreen
         session={session}
         onBack={() => setActiveScreen('main')}
       />
@@ -585,7 +604,9 @@ export function Dashboard({ session, onLogout }: Props) {
                               ? () => setActiveScreen('chat')
                               : w.key === 'face'
                                 ? () => setActiveScreen('face')
-                                : undefined
+                                : w.key === 'gatepass'
+                                  ? () => setActiveScreen('gatepass')
+                                  : undefined
                 }
               >
                 {w.key === 'chat' && unreadGroupCount > 0 ? (
