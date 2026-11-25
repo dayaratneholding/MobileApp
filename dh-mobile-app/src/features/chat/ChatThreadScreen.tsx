@@ -745,9 +745,10 @@ export function ChatThreadScreen({
   const visibleChoices = memberQuery ? memberChoices.slice(0, 40) : memberChoices.slice(0, 12);
   const hiddenChoiceCount = memberChoices.length - visibleChoices.length;
   const canManageMembers = canAddMembers || canRemoveMembers;
+  const memberCountLabel =
+    groupRoster.length === 1 ? '1 member' : `${groupRoster.length} members`;
 
   const openMemberPicker = () => {
-    if (!canManageMembers) return;
     setMemberOpen(true);
     setUserQuery('');
     if (!canAddMembers || directory.length > 0 || directoryLoading) return;
@@ -819,14 +820,14 @@ export function ChatThreadScreen({
           <View style={styles.headerAvatar}>
             <Text style={styles.headerAvatarText}>{initial}</Text>
           </View>
-          <View style={styles.headerBody}>
+          <Pressable style={styles.headerBody} onPress={openMemberPicker}>
             <Text style={styles.title} numberOfLines={1}>
               {group.name || 'Group'}
             </Text>
             <Text style={styles.subtitle} numberOfLines={1}>
-              Group chat
+              {memberCountLabel}
             </Text>
-          </View>
+          </Pressable>
           {canManageMembers ? (
             <Pressable style={styles.addMember} onPress={openMemberPicker} hitSlop={8}>
               <Text style={styles.addMemberText}>{canAddMembers ? '+' : '•••'}</Text>
@@ -1147,7 +1148,9 @@ export function ChatThreadScreen({
       <Modal visible={memberOpen} animationType="slide" onRequestClose={() => setMemberOpen(false)}>
         <View style={styles.memberScreen}>
           <View style={styles.memberHeader}>
-            <Text style={styles.memberTitle}>Members</Text>
+            <Text style={styles.memberTitle}>
+              {group.name || 'Group'} · {memberCountLabel}
+            </Text>
             <Pressable onPress={() => setMemberOpen(false)} hitSlop={8}>
               <Text style={styles.memberClose}>Close</Text>
             </Pressable>
@@ -1160,40 +1163,38 @@ export function ChatThreadScreen({
             autoCapitalize="none"
           />
           <ScrollView keyboardShouldPersistTaps="handled" style={styles.memberList}>
-            {canRemoveMembers ? (
-              <>
-                <Text style={styles.memberSection}>In this group</Text>
-                {listedMembers.length === 0 ? (
-                  <Text style={styles.userEmpty}>
-                    {groupRoster.length === 0 ? 'No members were returned.' : 'No members match that search.'}
-                  </Text>
-                ) : (
-                  listedMembers.map((member) => {
-                    const mine = isMine(member.userID, currentUserId);
-                    const removing = removingUserId?.toLowerCase() === member.userID.toLowerCase();
-                    return (
-                      <View key={member.userID} style={styles.userRow}>
-                        <View style={styles.userBody}>
-                          <Text style={styles.userName}>{member.userName}</Text>
-                          <Text style={styles.userId}>{member.userID}</Text>
-                        </View>
-                        {mine ? (
-                          <Text style={styles.userId}>You</Text>
-                        ) : (
-                          <Pressable
-                            onPress={() => handleRemoveMember(member)}
-                            disabled={Boolean(removingUserId || addingUserId)}
-                            hitSlop={8}
-                          >
-                            <Text style={styles.userRemove}>{removing ? 'Removing…' : 'Remove'}</Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    );
-                  })
-                )}
-              </>
-            ) : null}
+            <Text style={styles.memberSection}>In this group</Text>
+            {listedMembers.length === 0 ? (
+              <Text style={styles.userEmpty}>
+                {groupRoster.length === 0 ? 'No members were returned.' : 'No members match that search.'}
+              </Text>
+            ) : (
+              listedMembers.map((member) => {
+                const mine = isMine(member.userID, currentUserId);
+                const removing = removingUserId?.toLowerCase() === member.userID.toLowerCase();
+                const initialLetter = (member.userName || member.userID).slice(0, 1).toUpperCase();
+                return (
+                  <View key={member.userID} style={styles.userRow}>
+                    <View style={styles.memberAvatar}>
+                      <Text style={styles.memberAvatarText}>{initialLetter}</Text>
+                    </View>
+                    <View style={styles.userBody}>
+                      <Text style={styles.userName}>{mine ? 'You' : member.userName}</Text>
+                      <Text style={styles.userId}>{member.userID}</Text>
+                    </View>
+                    {canRemoveMembers && !mine ? (
+                      <Pressable
+                        onPress={() => handleRemoveMember(member)}
+                        disabled={Boolean(removingUserId || addingUserId)}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.userRemove}>{removing ? 'Removing…' : 'Remove'}</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
             {canAddMembers ? (
               <>
                 <Text style={styles.memberSection}>Add people</Text>
@@ -1608,6 +1609,20 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       color: colors.primary,
     },
     memberList: { flex: 1 },
+    memberAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.tintPrimary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: spacing.sm,
+    },
+    memberAvatarText: {
+      ...typography.label,
+      color: colors.primary,
+      fontWeight: '700',
+    },
     memberSection: {
       ...typography.caption,
       color: colors.textMuted,
