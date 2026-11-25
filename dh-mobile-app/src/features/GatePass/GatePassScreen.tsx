@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   radius,
@@ -9,15 +9,18 @@ import {
 } from '../../styles/theme';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
+import { GatePassCreate, type GatePassCreatePayload } from './GatePassCreate';
 
 type Props = {
   session: AuthSession;
   onBack: () => void;
-  onCreatePress?: () => void;
+  onCreatePress?: (payload?: GatePassCreatePayload) => Promise<void> | void;
   onViewPress?: () => void;
   onConfirmPress?: () => void;
   onApprovePress?: () => void;
 };
+
+type GatePassView = 'MENU' | 'CREATE' | 'VIEW' | 'CONFIRM' | 'APPROVE';
 
 export function GatePassScreen({
   session,
@@ -28,6 +31,26 @@ export function GatePassScreen({
   onApprovePress,
 }: Props) {
   const styles = useThemedStyles(createStyles);
+  const [activeView, setActiveView] = useState<GatePassView>('MENU');
+
+  function handleOpenCreate() {
+    setActiveView('CREATE');
+  }
+
+  async function handleCreateSubmit(payload: GatePassCreatePayload) {
+    await onCreatePress?.(payload);
+    setActiveView('MENU');
+  }
+
+  if (activeView === 'CREATE') {
+    return (
+      <GatePassCreate
+        session={session}
+        onBack={() => setActiveView('MENU')}
+        onSubmit={handleCreateSubmit}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -44,7 +67,7 @@ export function GatePassScreen({
         <View style={styles.grid}>
           <View style={styles.row}>
             <Pressable
-              onPress={onCreatePress}
+              onPress={handleOpenCreate}
               style={({ pressed }) => [
                 styles.card,
                 styles.primaryCard,
