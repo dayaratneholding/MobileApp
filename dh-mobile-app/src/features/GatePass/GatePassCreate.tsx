@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,7 +18,10 @@ import {
 } from '../../styles/theme';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
-
+import { getEmployeeByEeSerialId } from '../../api/endpoints/employee';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 export type GatePassType = 'EXIT' | 'ENTRY';
 
 export type GatePassCreatePayload = {
@@ -38,29 +41,91 @@ type Props = {
 export function GatePassCreate({ session, onBack, onSubmit }: Props) {
   const styles = useThemedStyles(createStyles);
 
+  // Session & Employee IDs
+  const [eeSerialID, setEESerialID] = useState(session?.eESerialID ?? '');
+  const [comSerialID, setComSerialID] = useState(session?.comSerialID ?? '');
+  const [eeid, setEeid] = useState('');
+
+  // Form states matching your inputs and GatePassCreatePayload
+  const [passType, setPassType] = useState<GatePassType>('EXIT');
   const [purpose, setPurpose] = useState('');
-  const [eeSerialID , setEESerialID] = useState('');
-  const [comSerialID , setComSerialID] = useState('');
-  const [departureTime , setDepartureTime] = useState('');
-  const [returnTime , setReturnTime] = useState('');
-  const [date , setDate] = useState('');
-  const [vehicleNumber, setVehicleNumber] = useState('');
-  const [reason, setReason] = useState('');
-  const [remark, setRemark] = useState('');
-  const [eGatePassStatus , setEGatePassStatus] = useState<GatePassType>();
-  const [planDepartureDate , setPlanDepartureDate] = useState('');
-  const [planDepartureTime , setPlanDepartureTime] = useState('');
-  const [returnstatus , setReturnstatus] = useState('');
+  const [destination, setDestination] = useState('');
+  const [vehicleOrItem, setVehicleOrItem] = useState('');
+  const [remarks, setRemarks] = useState('');
+
+  // Optional extra fields you declared (kept if you plan to use them later)
+  const [departureTime, setDepartureTime] = useState('');
+  const [returnTime, setReturnTime] = useState('');
+  const [date, setDate] = useState('');
+  const [planDepartureDate, setPlanDepartureDate] = useState('');
+  const [planDepartureTime, setPlanDepartureTime] = useState('');
+  const [returnstatus, setReturnstatus] = useState('');
+
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [departureDateObj, setDepartureDateObj] = useState<Date>(new Date());
+function formatDateYMD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+  // On Android, dismiss the picker on both 'set' and 'dismissed'
+  if (Platform.OS === 'android') {
+    setShowDatePicker(false);
+  }
+
+  if (event.type === 'set' && selectedDate) {
+    setDepartureDateObj(selectedDate);
+    setPlanDepartureDate(formatDateYMD(selectedDate));
+  }
+}
+
+  // Fetch EEID once when session loads or changes
+  useEffect(() => {
+    const currentEeSerialId = session?.eESerialID ?? eeSerialID;
+    const currentComSerialId = session?.comSerialID ?? comSerialID;
+
+    if (session?.eESerialID) setEESerialID(session.eESerialID);
+    if (session?.comSerialID) setComSerialID(session.comSerialID);
+
+    if (!currentEeSerialId) return;
+
+    let isMounted = true;
+
+    async function fetchEmployeeId() {
+      const numericSerialId = Number(currentEeSerialId);
+
+      if (!currentEeSerialId || Number.isNaN(numericSerialId)) {
+        return;
+      }
+
+      try {
+        const employee = await getEmployeeByEeSerialId(numericSerialId);
+        if (isMounted && employee?.eeid != null) {
+          setEeid(String(employee.eeid));
+        }
+      } catch (err) {
+        if (__DEV__) {
+          console.warn('[GatePass] Could not resolve EEID:', err);
+        }
+      }
+}
+
+    fetchEmployeeId();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.eESerialID, session?.comSerialID]);
+
   async function handleSubmit() {
-    if (!purpose.trim()) {
-      setError('Please enter the reason or purpose for this gate pass.');
-      return;
-    }
-    if (!destination.trim()) {
-      setError('Please enter the destination or location.');
+    if (!String(eeSerialID).trim() || !String(comSerialID).trim()) {
+      setError('Restart the Mobile App');
       return;
     }
 
@@ -99,22 +164,40 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
-          <TextInput
-          onChangeText={setEEID}
-          >
-
-          </TextInput>
-
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Purpose *</Text>
+            <Text style={styles.label}>Employee ID</Text>
             <TextInput
-              value={purpose}
-              onChangeText={setPurpose}
-              placeholder="e.g. Official visit, material dispatch, personal"
+              value={eeid}
+              placeholder="Loading..."
               placeholderTextColor={styles.placeholder.color}
               style={styles.input}
+              editable={false}
+              selectTextOnFocus={false}
             />
           </View>
+
+          <View style={styles.fieldGroup}>
+  <Text style={styles.label}>Plan Departure Date</Text>
+  <Pressable onPress={() => setShowDatePicker(true)}>
+    <TextInput
+      value={planDepartureDate}
+      placeholder="Select departure date (YYYY-MM-DD)"
+      placeholderTextColor={styles.placeholder.color}
+      style={styles.input}
+      editable={false}
+      pointerEvents="none"
+    />
+  </Pressable>
+
+  {showDatePicker && (
+    <DateTimePicker
+      value={departureDateObj}
+      mode="date"
+      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+      onChange={handleDateChange}
+    />
+  )}
+</View>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Destination / Location *</Text>
