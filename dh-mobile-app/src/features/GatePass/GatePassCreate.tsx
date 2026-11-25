@@ -16,12 +16,14 @@ import {
   type ColorPalette,
   type ShadowTokens,
 } from '../../styles/theme';
+import { Picker } from '@react-native-picker/picker';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import { getEmployeeByEeSerialId } from '../../api/endpoints/employee';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
+
 export type GatePassType = 'EXIT' | 'ENTRY';
 
 export type GatePassCreatePayload = {
@@ -46,17 +48,14 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
   const [comSerialID, setComSerialID] = useState(session?.comSerialID ?? '');
   const [eeid, setEeid] = useState('');
 
-  // Form states matching your inputs and GatePassCreatePayload
+  // Form states
   const [passType, setPassType] = useState<GatePassType>('EXIT');
   const [purpose, setPurpose] = useState('');
   const [destination, setDestination] = useState('');
   const [vehicleOrItem, setVehicleOrItem] = useState('');
   const [remarks, setRemarks] = useState('');
 
-  // Optional extra fields you declared (kept if you plan to use them later)
   const [departureTime, setDepartureTime] = useState('');
-  const [returnTime, setReturnTime] = useState('');
-  const [date, setDate] = useState('');
   const [planDepartureDate, setPlanDepartureDate] = useState('');
   const [planDepartureTime, setPlanDepartureTime] = useState('');
   const [returnstatus, setReturnstatus] = useState('');
@@ -64,31 +63,66 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Date & Time Picker States
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [departureDateObj, setDepartureDateObj] = useState<Date>(new Date());
-function formatDateYMD(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
-function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
-  // On Android, dismiss the picker on both 'set' and 'dismissed'
-  if (Platform.OS === 'android') {
-    setShowDatePicker(false);
+  const [departureTimeObj, setDepartureTimeObj] = useState<Date>(new Date());
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+  const [planDepartureTimeObj, setPlanDepartureTimeObj] = useState<Date>(
+    new Date()
+  );
+  const [showPlanTimePicker, setShowPlanTimePicker] = useState(false);
+
+  function formatTime24(date: Date): string {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   }
 
-  if (event.type === 'set' && selectedDate) {
-    setDepartureDateObj(selectedDate);
-    setPlanDepartureDate(formatDateYMD(selectedDate));
+  function handleTimeChange(event: DateTimePickerEvent, selectedTime?: Date) {
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+    if (event.type === 'set' && selectedTime) {
+      setDepartureTimeObj(selectedTime);
+      setDepartureTime(formatTime24(selectedTime));
+    }
   }
-}
 
-  // Fetch EEID once when session loads or changes
+  function handlePlanTimeChange(
+    event: DateTimePickerEvent,
+    selectedTime?: Date
+  ) {
+    if (Platform.OS === 'android') {
+      setShowPlanTimePicker(false);
+    }
+    if (event.type === 'set' && selectedTime) {
+      setPlanDepartureTimeObj(selectedTime);
+      setPlanDepartureTime(formatTime24(selectedTime));
+    }
+  }
+
+  function formatDateYMD(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (event.type === 'set' && selectedDate) {
+      setDepartureDateObj(selectedDate);
+      setPlanDepartureDate(formatDateYMD(selectedDate));
+    }
+  }
+
   useEffect(() => {
     const currentEeSerialId = session?.eESerialID ?? eeSerialID;
-    const currentComSerialId = session?.comSerialID ?? comSerialID;
 
     if (session?.eESerialID) setEESerialID(session.eESerialID);
     if (session?.comSerialID) setComSerialID(session.comSerialID);
@@ -99,7 +133,6 @@ function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
 
     async function fetchEmployeeId() {
       const numericSerialId = Number(currentEeSerialId);
-
       if (!currentEeSerialId || Number.isNaN(numericSerialId)) {
         return;
       }
@@ -114,7 +147,7 @@ function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
           console.warn('[GatePass] Could not resolve EEID:', err);
         }
       }
-}
+    }
 
     fetchEmployeeId();
 
@@ -177,62 +210,103 @@ function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
           </View>
 
           <View style={styles.fieldGroup}>
-  <Text style={styles.label}>Plan Departure Date</Text>
-  <Pressable onPress={() => setShowDatePicker(true)}>
-    <TextInput
-      value={planDepartureDate}
-      placeholder="Select departure date (YYYY-MM-DD)"
-      placeholderTextColor={styles.placeholder.color}
-      style={styles.input}
-      editable={false}
-      pointerEvents="none"
-    />
-  </Pressable>
+            <Text style={styles.label}>Plan Departure Date</Text>
+            <Pressable onPress={() => setShowDatePicker(true)}>
+              <TextInput
+                value={planDepartureDate}
+                placeholder="Select departure date (YYYY-MM-DD)"
+                placeholderTextColor={styles.placeholder.color}
+                style={styles.input}
+                editable={false}
+                pointerEvents="none"
+              />
+            </Pressable>
 
-  {showDatePicker && (
-    <DateTimePicker
-      value={departureDateObj}
-      mode="date"
-      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-      onChange={handleDateChange}
-    />
-  )}
-</View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Destination / Location *</Text>
-            <TextInput
-              value={destination}
-              onChangeText={setDestination}
-              placeholder="e.g. Head Office, Supplier site, Client location"
-              placeholderTextColor={styles.placeholder.color}
-              style={styles.input}
-            />
+            {showDatePicker && (
+              <DateTimePicker
+                value={departureDateObj}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleDateChange}
+              />
+            )}
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Vehicle / Item Details</Text>
-            <TextInput
-              value={vehicleOrItem}
-              onChangeText={setVehicleOrItem}
-              placeholder="Optional vehicle number or carried items"
-              placeholderTextColor={styles.placeholder.color}
-              style={styles.input}
-            />
+            <Text style={styles.label}>Departure Time</Text>
+            <Pressable onPress={() => setShowTimePicker(true)}>
+              <TextInput
+                value={departureTime}
+                placeholder="Select departure time (HH:MM)"
+                placeholderTextColor={styles.placeholder.color}
+                style={styles.input}
+                editable={false}
+                pointerEvents="none"
+              />
+            </Pressable>
+
+            {showTimePicker && (
+              <DateTimePicker
+                value={departureTimeObj}
+                mode="time"
+                is24Hour={true}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleTimeChange}
+              />
+            )}
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Remarks</Text>
-            <TextInput
-              value={remarks}
-              onChangeText={setRemarks}
-              placeholder="Additional notes for confirmation / approval"
-              placeholderTextColor={styles.placeholder.color}
-              style={[styles.input, styles.textArea]}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
+            <Text style={styles.label}>Plan Departure Time</Text>
+            <Pressable onPress={() => setShowPlanTimePicker(true)}>
+              <TextInput
+                value={planDepartureTime}
+                placeholder="Select plan departure time (HH:MM)"
+                placeholderTextColor={styles.placeholder.color}
+                style={styles.input}
+                editable={false}
+                pointerEvents="none"
+              />
+            </Pressable>
+
+            {showPlanTimePicker && (
+              <DateTimePicker
+                value={planDepartureTimeObj}
+                mode="time"
+                is24Hour={true}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handlePlanTimeChange}
+              />
+            )}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Return Status</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={returnstatus}
+                onValueChange={(itemValue) => setReturnstatus(itemValue)}
+                style={styles.picker}
+                dropdownIconColor={styles.input.color}
+                mode="dropdown"
+              >
+                <Picker.Item
+                  label="Select return status..."
+                  value=""
+                  color={styles.placeholder.color}
+                />
+                <Picker.Item
+                  label="Return"
+                  value="RETURN"
+                  color={styles.input.color}
+                />
+                <Picker.Item
+                  label="Non-Return"
+                  value="NON_RETURN"
+                  color={styles.input.color}
+                />
+              </Picker>
+            </View>
           </View>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
@@ -295,39 +369,6 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       borderColor: colors.border ?? 'rgba(0,0,0,0.06)',
       ...shadow.soft,
     },
-    sectionLabel: {
-      ...typography.label,
-      color: colors.textSecondary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      marginBottom: spacing.sm,
-    },
-    segmentedRow: {
-      flexDirection: 'row',
-      gap: spacing.sm,
-      marginBottom: spacing.lg,
-    },
-    segmentBtn: {
-      flex: 1,
-      paddingVertical: spacing.md,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: colors.border ?? 'rgba(0,0,0,0.12)',
-      backgroundColor: colors.background,
-      alignItems: 'center',
-    },
-    segmentBtnActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    segmentText: {
-      ...typography.body,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    segmentTextActive: {
-      color: colors.textOnPrimary,
-    },
     fieldGroup: {
       marginBottom: spacing.lg,
     },
@@ -346,8 +387,18 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
     },
-    textArea: {
-      minHeight: 88,
+    pickerContainer: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border ?? 'rgba(0,0,0,0.12)',
+      borderRadius: radius.md,
+      height: Platform.OS === 'android' ? 52 : undefined,
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    picker: {
+      color: colors.text,
+      width: '100%',
     },
     placeholder: {
       color: colors.textSecondary,
