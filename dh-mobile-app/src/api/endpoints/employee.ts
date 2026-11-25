@@ -79,6 +79,41 @@ function pickEmployeeForCompany(
   return employees[0];
 }
 
+export async function listCompanyEmployees(comSerialID: number): Promise<EmployeeDetails[]> {
+  const result = await getHcmJson<unknown>(`/Employees/GetEmployees/${comSerialID}`);
+  const source = Array.isArray(result)
+    ? result
+    : result && typeof result === 'object' && Array.isArray((result as { data?: unknown }).data)
+      ? (result as { data: unknown[] }).data
+      : [];
+
+  const employees: EmployeeDetails[] = [];
+  for (const item of source) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const serial = Number(record.eeSerialID ?? record.eESerialID);
+    const eeid = Number(record.eeid ?? record.EEID);
+    if (!serial || !eeid) continue;
+    const name = typeof record.nameWithInitials === 'string' ? record.nameWithInitials : null;
+    const fullName = typeof record.fullName === 'string' ? record.fullName : name;
+    employees.push({
+      eeSerialID: serial,
+      eeid,
+      comSerialID: Number(record.comSerialID ?? record.ComSerialID) || comSerialID,
+      scheme: null,
+      nameWithInitials: name,
+      callName: typeof record.callName === 'string' ? record.callName : null,
+      fullName,
+      desigName: null,
+      deptName: null,
+      basicSalary: null,
+      bankAccNo: null,
+      bankName: null,
+    });
+  }
+  return employees;
+}
+
 export async function getEmployeeByEeSerialId(
   eeSerialID: number,
 ): Promise<EmployeeDetails> {

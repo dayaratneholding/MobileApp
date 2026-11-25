@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,6 +10,20 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
+import { getApiErrorMessage } from '../../api/client/client';
+import { getEmployeeByEeSerialId, listCompanyEmployees } from '../../api/endpoints/employee';
+import {
+  createGatePass,
+  dateParts,
+  listCompanyVehicles,
+  timeTicks,
+  type CompanyVehicle,
+} from '../../api/endpoints/gatePass';
+import type { EmployeeDetails } from '../../types/payslip';
 import {
   radius,
   spacing,
@@ -16,162 +31,237 @@ import {
   type ColorPalette,
   type ShadowTokens,
 } from '../../styles/theme';
-import { Picker } from '@react-native-picker/picker';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
-import { getEmployeeByEeSerialId } from '../../api/endpoints/employee';
-import DateTimePicker, {
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
 
-export type GatePassType = 'EXIT' | 'ENTRY';
+export const ReturnStatus = {
+  Returned: 1,
+  DutyoffNoReturn: 2,
+} as const;
 
-export type GatePassCreatePayload = {
-  passType: GatePassType;
-  purpose: string;
-  destination: string;
-  vehicleOrItem: string;
-  remarks: string;
+export type ReturnStatusValue = (typeof ReturnStatus)[keyof typeof ReturnStatus];
+
+export const RETURN_STATUS_OPTIONS: { label: string; value: ReturnStatusValue }[] = [
+  { label: 'Returned', value: ReturnStatus.Returned },
+  { label: 'Duty Off (No Return)', value: ReturnStatus.DutyoffNoReturn },
+];
+
+export const EGatePassStatus = {
+  Pending: 1,
+  Approved: 2,
+  Confirmed: 3,
+  Departed: 4,
+  Returned: 5,
+  DutyOff: 6,
+  Rejected: 7,
+} as const;
+
+type ExtraEmployee = {
+  eeSerialID: number;
+  eeid: number;
+  fullName: string;
 };
 
 type Props = {
   session?: AuthSession;
   onBack?: () => void;
-  onSubmit?: (payload: GatePassCreatePayload) => Promise<void> | void;
+  onSubmit?: () => Promise<void> | void;
 };
+
+function formatTime24(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function formatDateYMD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export function GatePassCreate({ session, onBack, onSubmit }: Props) {
   const styles = useThemedStyles(createStyles);
+  const eeSerialID = session?.eESerialID ?? 0;
+  const comSerialID = session?.comSerialID ?? 0;
 
-  // Session & Employee IDs
-  const [eeSerialID, setEESerialID] = useState(session?.eESerialID ?? '');
-  const [comSerialID, setComSerialID] = useState(session?.comSerialID ?? '');
+  const [mainName, setMainName] = useState(session?.userName || 'You');
   const [eeid, setEeid] = useState('');
-
-  // Form states
-  const [passType, setPassType] = useState<GatePassType>('EXIT');
-  const [purpose, setPurpose] = useState('');
-  const [destination, setDestination] = useState('');
-  const [vehicleOrItem, setVehicleOrItem] = useState('');
-  const [remarks, setRemarks] = useState('');
-
-  const [departureTime, setDepartureTime] = useState('');
-  const [planDepartureDate, setPlanDepartureDate] = useState('');
-  const [planDepartureTime, setPlanDepartureTime] = useState('');
-  const [returnstatus, setReturnstatus] = useState('');
-
-  const [error, setError] = useState<string | null>(null);
+  const [planDate, setPlanDate] = useState<Date>(new Date());
+  const [planDateText, setPlanDateText] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [departureTime, setDepartureTime] = useState<Date>(new Date());
+  const [departureText, setDepartureText] = useState('');
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
+  const [planTime, setPlanTime] = useState<Date>(new Date());
+  const [planTimeText, setPlanTimeText] = useState('');
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
+  const [returnTime, setReturnTime] = useState<Date>(new Date());
+  const [returnText, setReturnText] = useState('');
+  const [showReturnPicker, setShowReturnPicker] = useState(false);
+  const [returnstatus, setReturnstatus] = useState<ReturnStatusValue | ''>('');
+  const [vehicles, setVehicles] = useState<CompanyVehicle[]>([]);
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
+  const [reason, setReason] = useState('');
+  const [remark, setRemark] = useState('');
+  const [employees, setEmployees] = useState<EmployeeDetails[]>([]);
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [extras, setExtras] = useState<ExtraEmployee[]>([]);
+  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Date & Time Picker States
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [departureDateObj, setDepartureDateObj] = useState<Date>(new Date());
-
-  const [departureTimeObj, setDepartureTimeObj] = useState<Date>(new Date());
-  const [showTimePicker, setShowTimePicker] = useState(false);
-
-  const [planDepartureTimeObj, setPlanDepartureTimeObj] = useState<Date>(
-    new Date()
-  );
-  const [showPlanTimePicker, setShowPlanTimePicker] = useState(false);
-
-  function formatTime24(date: Date): string {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  }
-
-  function handleTimeChange(event: DateTimePickerEvent, selectedTime?: Date) {
-    if (Platform.OS === 'android') {
-      setShowTimePicker(false);
-    }
-    if (event.type === 'set' && selectedTime) {
-      setDepartureTimeObj(selectedTime);
-      setDepartureTime(formatTime24(selectedTime));
-    }
-  }
-
-  function handlePlanTimeChange(
-    event: DateTimePickerEvent,
-    selectedTime?: Date
-  ) {
-    if (Platform.OS === 'android') {
-      setShowPlanTimePicker(false);
-    }
-    if (event.type === 'set' && selectedTime) {
-      setPlanDepartureTimeObj(selectedTime);
-      setPlanDepartureTime(formatTime24(selectedTime));
-    }
-  }
-
-  function formatDateYMD(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (event.type === 'set' && selectedDate) {
-      setDepartureDateObj(selectedDate);
-      setPlanDepartureDate(formatDateYMD(selectedDate));
-    }
-  }
+  useEffect(() => {
+    if (!eeSerialID) return;
+    let active = true;
+    getEmployeeByEeSerialId(eeSerialID)
+      .then((employee) => {
+        if (!active) return;
+        setEeid(String(employee.eeid));
+        setMainName(employee.fullName || employee.callName || employee.nameWithInitials || session?.userName || 'You');
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [eeSerialID, session?.userName]);
 
   useEffect(() => {
-    const currentEeSerialId = session?.eESerialID ?? eeSerialID;
-
-    if (session?.eESerialID) setEESerialID(session.eESerialID);
-    if (session?.comSerialID) setComSerialID(session.comSerialID);
-
-    if (!currentEeSerialId) return;
-
-    let isMounted = true;
-
-    async function fetchEmployeeId() {
-      const numericSerialId = Number(currentEeSerialId);
-      if (!currentEeSerialId || Number.isNaN(numericSerialId)) {
-        return;
-      }
-
-      try {
-        const employee = await getEmployeeByEeSerialId(numericSerialId);
-        if (isMounted && employee?.eeid != null) {
-          setEeid(String(employee.eeid));
-        }
-      } catch (err) {
-        if (__DEV__) {
-          console.warn('[GatePass] Could not resolve EEID:', err);
-        }
-      }
-    }
-
-    fetchEmployeeId();
-
+    let active = true;
+    setLoadingVehicles(true);
+    listCompanyVehicles()
+      .then((list) => {
+        if (active) setVehicles(list);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoadingVehicles(false);
+      });
+    if (!comSerialID) return;
+    listCompanyEmployees(comSerialID)
+      .then((list) => {
+        if (active) setEmployees(list);
+      })
+      .catch(() => undefined);
     return () => {
-      isMounted = false;
+      active = false;
     };
-  }, [session?.eESerialID, session?.comSerialID]);
+  }, [comSerialID]);
+
+  const chosenIds = new Set([eeSerialID, ...extras.map((person) => person.eeSerialID)]);
+  const eeidQuery = peopleQuery.replace(/\D/g, '');
+  const matches = eeidQuery
+    ? employees
+        .filter((employee) => {
+          if (chosenIds.has(employee.eeSerialID)) return false;
+          return String(employee.eeid).startsWith(eeidQuery);
+        })
+        .slice(0, 12)
+    : [];
+
+  function pickDate(event: DateTimePickerEvent, selected?: Date) {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (event.type === 'set' && selected) {
+      setPlanDate(selected);
+      setPlanDateText(formatDateYMD(selected));
+    }
+  }
+
+  function pickDeparture(event: DateTimePickerEvent, selected?: Date) {
+    if (Platform.OS === 'android') setShowDeparturePicker(false);
+    if (event.type === 'set' && selected) {
+      setDepartureTime(selected);
+      setDepartureText(formatTime24(selected));
+    }
+  }
+
+  function pickPlanTime(event: DateTimePickerEvent, selected?: Date) {
+    if (Platform.OS === 'android') setShowPlanPicker(false);
+    if (event.type === 'set' && selected) {
+      setPlanTime(selected);
+      setPlanTimeText(formatTime24(selected));
+    }
+  }
+
+  function pickReturn(event: DateTimePickerEvent, selected?: Date) {
+    if (Platform.OS === 'android') setShowReturnPicker(false);
+    if (event.type === 'set' && selected) {
+      setReturnTime(selected);
+      setReturnText(formatTime24(selected));
+    }
+  }
+
+  function addEmployee(employee: EmployeeDetails) {
+    if (chosenIds.has(employee.eeSerialID)) return;
+    const fullName = employee.fullName || employee.callName || employee.nameWithInitials || String(employee.eeid);
+    setExtras((current) => [
+      ...current,
+      { eeSerialID: employee.eeSerialID, eeid: employee.eeid, fullName },
+    ]);
+    setPeopleQuery('');
+  }
 
   async function handleSubmit() {
-    if (!String(eeSerialID).trim() || !String(comSerialID).trim()) {
-      setError('Restart the Mobile App');
+    if (!eeSerialID || !comSerialID) {
+      setError('Restart the app and sign in again.');
+      return;
+    }
+    if (!planDateText || !departureText || !planTimeText || !returnstatus) {
+      setError('Enter the date, departure time, plan time, and return status.');
+      return;
+    }
+    if (returnstatus === ReturnStatus.Returned && !returnText) {
+      setError('Enter the return time.');
+      return;
+    }
+    if (!reason.trim()) {
+      setError('Enter the reason for this gate pass.');
       return;
     }
 
-    setError(null);
+    const details = [
+      {
+        eGatePassSerialID: 0,
+        comSerialID,
+        eeSerialID,
+        fullName: mainName,
+      },
+      ...extras.map((person) => ({
+        eGatePassSerialID: 0,
+        comSerialID,
+        eeSerialID: person.eeSerialID,
+        fullName: person.fullName,
+      })),
+    ];
+
+    setError('');
     setSubmitting(true);
     try {
-      await onSubmit?.({
-        passType,
-        purpose: purpose.trim(),
-        destination: destination.trim(),
-        vehicleOrItem: vehicleOrItem.trim(),
-        remarks: remarks.trim(),
+      await createGatePass({
+        eeSerialID,
+        comSerialID,
+        departureTime: timeTicks(departureTime),
+        returnTime: returnText ? timeTicks(returnTime) : { ticks: 0 },
+        date: dateParts(planDate),
+        vehicleNumber,
+        reason: reason.trim(),
+        remark: remark.trim(),
+        approvedBy: 0,
+        approvedDate: null,
+        confirmedBy: 0,
+        confirmedDate: null,
+        eGatePassStatus: EGatePassStatus.Pending,
+        planDepartureDate: dateParts(planDate),
+        planDepartureTime: timeTicks(planTime),
+        returnstatus,
+        employeeGatePassDetail: details,
+        mnuSerialID: 0,
       });
+      Alert.alert('Gate pass created', 'The request was sent.');
+      await onSubmit?.();
+    } catch (err) {
+      setError(getApiErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -183,11 +273,11 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        {onBack && (
+        {onBack ? (
           <Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
             <Text style={styles.backText}>‹ Back</Text>
           </Pressable>
-        )}
+        ) : null}
         <Text style={styles.title}>Create GatePass</Text>
       </View>
 
@@ -198,118 +288,180 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
       >
         <View style={styles.card}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Employee ID</Text>
-            <TextInput
-              value={eeid}
-              placeholder="Loading..."
-              placeholderTextColor={styles.placeholder.color}
-              style={styles.input}
-              editable={false}
-              selectTextOnFocus={false}
-            />
+            <Text style={styles.label}>Main employee</Text>
+            <TextInput value={eeid ? `${mainName} · ${eeid}` : mainName} style={styles.input} editable={false} />
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Plan Departure Date</Text>
+            <Text style={styles.label}>Date</Text>
             <Pressable onPress={() => setShowDatePicker(true)}>
               <TextInput
-                value={planDepartureDate}
-                placeholder="Select departure date (YYYY-MM-DD)"
+                value={planDateText}
+                placeholder="Select date"
                 placeholderTextColor={styles.placeholder.color}
                 style={styles.input}
                 editable={false}
                 pointerEvents="none"
               />
             </Pressable>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={departureDateObj}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-              />
-            )}
+            {showDatePicker ? (
+              <DateTimePicker value={planDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={pickDate} />
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Departure Time</Text>
-            <Pressable onPress={() => setShowTimePicker(true)}>
+            <Text style={styles.label}>Departure time</Text>
+            <Pressable onPress={() => setShowDeparturePicker(true)}>
               <TextInput
-                value={departureTime}
-                placeholder="Select departure time (HH:MM)"
+                value={departureText}
+                placeholder="Select departure time"
                 placeholderTextColor={styles.placeholder.color}
                 style={styles.input}
                 editable={false}
                 pointerEvents="none"
               />
             </Pressable>
-
-            {showTimePicker && (
-              <DateTimePicker
-                value={departureTimeObj}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleTimeChange}
-              />
-            )}
+            {showDeparturePicker ? (
+              <DateTimePicker value={departureTime} mode="time" is24Hour display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={pickDeparture} />
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Plan Departure Time</Text>
-            <Pressable onPress={() => setShowPlanTimePicker(true)}>
+            <Text style={styles.label}>Plan departure time</Text>
+            <Pressable onPress={() => setShowPlanPicker(true)}>
               <TextInput
-                value={planDepartureTime}
-                placeholder="Select plan departure time (HH:MM)"
+                value={planTimeText}
+                placeholder="Select plan time"
                 placeholderTextColor={styles.placeholder.color}
                 style={styles.input}
                 editable={false}
                 pointerEvents="none"
               />
             </Pressable>
-
-            {showPlanTimePicker && (
-              <DateTimePicker
-                value={planDepartureTimeObj}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handlePlanTimeChange}
-              />
-            )}
+            {showPlanPicker ? (
+              <DateTimePicker value={planTime} mode="time" is24Hour display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={pickPlanTime} />
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Return Status</Text>
+            <Text style={styles.label}>Return status</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={returnstatus}
-                onValueChange={(itemValue) => setReturnstatus(itemValue)}
+                onValueChange={(itemValue) => setReturnstatus(itemValue as ReturnStatusValue | '')}
                 style={styles.picker}
-                dropdownIconColor={styles.input.color}
-                mode="dropdown"
+                dropdownIconColor={styles.picker.color}
               >
-                <Picker.Item
-                  label="Select return status..."
-                  value=""
-                  color={styles.placeholder.color}
-                />
-                <Picker.Item
-                  label="Return"
-                  value="RETURN"
-                  color={styles.input.color}
-                />
-                <Picker.Item
-                  label="Non-Return"
-                  value="NON_RETURN"
-                  color={styles.input.color}
-                />
+                <Picker.Item label="Select return status..." value="" color={styles.placeholder.color} />
+                {RETURN_STATUS_OPTIONS.map((opt) => (
+                  <Picker.Item key={opt.value} label={opt.label} value={opt.value} color={styles.picker.color} />
+                ))}
               </Picker>
             </View>
           </View>
 
-          {error && <Text style={styles.errorText}>{error}</Text>}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Return time</Text>
+            <Pressable onPress={() => setShowReturnPicker(true)}>
+              <TextInput
+                value={returnText}
+                placeholder="Select return time"
+                placeholderTextColor={styles.placeholder.color}
+                style={styles.input}
+                editable={false}
+                pointerEvents="none"
+              />
+            </Pressable>
+            {showReturnPicker ? (
+              <DateTimePicker value={returnTime} mode="time" is24Hour display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={pickReturn} />
+            ) : null}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Vehicle number</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={vehicleNumber}
+                onValueChange={(itemValue) => setVehicleNumber(String(itemValue))}
+                style={styles.picker}
+                dropdownIconColor={styles.picker.color}
+              >
+                <Picker.Item
+                  label={loadingVehicles ? 'Loading vehicles...' : 'Select vehicle number...'}
+                  value=""
+                  color={styles.placeholder.color}
+                />
+                {vehicles.map((vehicle) => (
+                  <Picker.Item
+                    key={vehicle.comVehicleSerialID || vehicle.vehicleNumber}
+                    label={vehicle.vehicleDesc ? `${vehicle.vehicleNumber} (${vehicle.vehicleDesc})` : vehicle.vehicleNumber}
+                    value={vehicle.vehicleNumber}
+                    color={styles.picker.color}
+                  />
+                ))}
+              </Picker>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Reason</Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Why is this gate pass needed?"
+              placeholderTextColor={styles.placeholder.color}
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Remark</Text>
+            <TextInput
+              value={remark}
+              onChangeText={setRemark}
+              placeholder="Optional note"
+              placeholderTextColor={styles.placeholder.color}
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Other employees</Text>
+            <Text style={styles.hint}>The main employee is included. Enter an EEID to see employees, then add them.</Text>
+            <View style={styles.memberRow}>
+              <Text style={styles.memberName}>{mainName}</Text>
+              <Text style={styles.memberMark}>Main</Text>
+            </View>
+            {extras.map((person) => (
+              <View key={person.eeSerialID} style={styles.memberRow}>
+                <Text style={styles.memberName}>EEID {person.eeid}</Text>
+                <Pressable onPress={() => setExtras((current) => current.filter((item) => item.eeSerialID !== person.eeSerialID))} hitSlop={8}>
+                  <Text style={styles.memberRemove}>Remove</Text>
+                </Pressable>
+              </View>
+            ))}
+            <TextInput
+              value={peopleQuery}
+              onChangeText={(value) => setPeopleQuery(value.replace(/\D/g, ''))}
+              placeholder="Enter EEID"
+              placeholderTextColor={styles.placeholder.color}
+              style={styles.input}
+              keyboardType="number-pad"
+            />
+            {matches.map((employee) => (
+              <Pressable key={employee.eeSerialID} style={styles.matchRow} onPress={() => addEmployee(employee)}>
+                <View style={styles.memberText}>
+                  <Text style={styles.memberName}>EEID {employee.eeid}</Text>
+                  <Text style={styles.hint}>
+                    {employee.fullName || employee.callName || employee.nameWithInitials || 'Employee'}
+                  </Text>
+                </View>
+                <Text style={styles.memberMark}>Add</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <Pressable
             onPress={handleSubmit}
@@ -320,9 +472,7 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
               pressed && !submitting && styles.submitBtnPressed,
             ]}
           >
-            <Text style={styles.submitText}>
-              {submitting ? 'Submitting...' : 'Submit GatePass'}
-            </Text>
+            <Text style={styles.submitText}>{submitting ? 'Submitting...' : 'Submit GatePass'}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -362,11 +512,11 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       paddingBottom: spacing.xxxl,
     },
     card: {
-      backgroundColor: colors.surface ?? colors.gradientStart,
-      borderRadius: radius.xl ?? radius.lg,
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
       padding: spacing.xl,
       borderWidth: 1,
-      borderColor: colors.border ?? 'rgba(0,0,0,0.06)',
+      borderColor: colors.border,
       ...shadow.soft,
     },
     fieldGroup: {
@@ -377,12 +527,17 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       color: colors.text,
       marginBottom: spacing.xs,
     },
+    hint: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginBottom: spacing.sm,
+    },
     input: {
       ...typography.body,
       color: colors.text,
       backgroundColor: colors.background,
       borderWidth: 1,
-      borderColor: colors.border ?? 'rgba(0,0,0,0.12)',
+      borderColor: colors.border,
       borderRadius: radius.md,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
@@ -390,7 +545,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     pickerContainer: {
       backgroundColor: colors.background,
       borderWidth: 1,
-      borderColor: colors.border ?? 'rgba(0,0,0,0.12)',
+      borderColor: colors.border,
       borderRadius: radius.md,
       height: Platform.OS === 'android' ? 52 : undefined,
       justifyContent: 'center',
@@ -398,14 +553,47 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     picker: {
       color: colors.text,
+      backgroundColor: colors.background,
       width: '100%',
     },
     placeholder: {
       color: colors.textSecondary,
     },
+    memberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    matchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.sm,
+    },
+    memberName: {
+      ...typography.label,
+      color: colors.text,
+      flex: 1,
+    },
+    memberText: {
+      flex: 1,
+    },
+    memberMark: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    memberRemove: {
+      ...typography.caption,
+      color: colors.danger,
+      fontWeight: '700',
+    },
     errorText: {
       ...typography.body,
-      color: '#DC2626',
+      color: colors.danger,
       marginBottom: spacing.md,
     },
     submitBtn: {
@@ -417,7 +605,6 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     },
     submitBtnPressed: {
       opacity: 0.9,
-      transform: [{ scale: 0.99 }],
     },
     submitBtnDisabled: {
       opacity: 0.6,

@@ -9,12 +9,12 @@ import {
 } from '../../styles/theme';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
-import { GatePassCreate, type GatePassCreatePayload } from './GatePassCreate';
+import { GatePassCreate } from './GatePassCreate';
 
 type Props = {
   session: AuthSession;
   onBack: () => void;
-  onCreatePress?: (payload?: GatePassCreatePayload) => Promise<void> | void;
+  onCreatePress?: () => Promise<void> | void;
   onViewPress?: () => void;
   onConfirmPress?: () => void;
   onApprovePress?: () => void;
@@ -37,8 +37,8 @@ export function GatePassScreen({
     setActiveView('CREATE');
   }
 
-  async function handleCreateSubmit(payload: GatePassCreatePayload) {
-    await onCreatePress?.(payload);
+  async function handleCreateSubmit() {
+    await onCreatePress?.();
     setActiveView('MENU');
   }
 
