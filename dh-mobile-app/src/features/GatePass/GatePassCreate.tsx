@@ -38,11 +38,19 @@ type Props = {
 export function GatePassCreate({ session, onBack, onSubmit }: Props) {
   const styles = useThemedStyles(createStyles);
 
-  const [passType, setPassType] = useState<GatePassType>('EXIT');
   const [purpose, setPurpose] = useState('');
-  const [destination, setDestination] = useState('');
-  const [vehicleOrItem, setVehicleOrItem] = useState('');
-  const [remarks, setRemarks] = useState('');
+  const [eeSerialID , setEESerialID] = useState('');
+  const [comSerialID , setComSerialID] = useState('');
+  const [departureTime , setDepartureTime] = useState('');
+  const [returnTime , setReturnTime] = useState('');
+  const [date , setDate] = useState('');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [reason, setReason] = useState('');
+  const [remark, setRemark] = useState('');
+  const [eGatePassStatus , setEGatePassStatus] = useState<GatePassType>();
+  const [planDepartureDate , setPlanDepartureDate] = useState('');
+  const [planDepartureTime , setPlanDepartureTime] = useState('');
+  const [returnstatus , setReturnstatus] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -91,31 +99,11 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Pass Type</Text>
-          <View style={styles.segmentedRow}>
-            {(['EXIT', 'ENTRY'] as const).map((type) => {
-              const active = passType === type;
-              return (
-                <Pressable
-                  key={type}
-                  onPress={() => setPassType(type)}
-                  style={[
-                    styles.segmentBtn,
-                    active && styles.segmentBtnActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      active && styles.segmentTextActive,
-                    ]}
-                  >
-                    {type === 'EXIT' ? 'Exit Pass' : 'Entry Pass'}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <TextInput
+          onChangeText={setEEID}
+          >
+
+          </TextInput>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Purpose *</Text>
