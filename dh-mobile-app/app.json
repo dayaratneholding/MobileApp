@@ -2,7 +2,7 @@
   "expo": {
     "name": "PSK Mobile",
     "slug": "dh-mobile-app",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/new-logo.jpeg",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
     "android": {
       "package": "app.pskerp.com",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/psk-logo.png"
