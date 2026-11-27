@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   radius,
@@ -9,6 +9,10 @@ import {
 } from '../../styles/theme';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
+import {
+  listGatePassApprovalMembers,
+  resolveGatePassAccess,
+} from '../../api/endpoints/gatePass';
 import { GatePassCreate } from './GatePassCreate';
 import { GatePassView } from './GatePassView';
 import { ConfirmGatePassScreen } from './ConfirmGatePassScreen';
@@ -34,6 +38,23 @@ export function GatePassScreen({
 }: Props) {
   const styles = useThemedStyles(createStyles);
   const [activeView, setActiveView] = useState<GatePassView>('MENU');
+  const [access, setAccess] = useState({ isHod: false, isAdmin: false, ready: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    listGatePassApprovalMembers()
+      .then((members) => {
+        if (cancelled) return;
+        const role = resolveGatePassAccess(members, session);
+        setAccess({ isHod: role.isHod, isAdmin: role.isAdmin, ready: true });
+      })
+      .catch(() => {
+        if (!cancelled) setAccess({ isHod: true, isAdmin: true, ready: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   function handleOpenCreate() {
     setActiveView('CREATE');
@@ -58,9 +79,24 @@ export function GatePassScreen({
     return <GatePassView session={session} onBack={() => setActiveView('MENU')} />;
   }
 
-  if(activeView === "CONFIRM"){
-      return <ConfirmGatePassScreen session={session} onBack={() => setActiveView('MENU')} />;
+  if (activeView === 'CONFIRM') {
+    return (
+      <ConfirmGatePassScreen
+        session={session}
+        mode="confirm"
+        onBack={() => setActiveView('MENU')}
+      />
+    );
+  }
 
+  if (activeView === 'APPROVE') {
+    return (
+      <ConfirmGatePassScreen
+        session={session}
+        mode="approve"
+        onBack={() => setActiveView('MENU')}
+      />
+    );
   }
 
   return (
@@ -119,10 +155,12 @@ export function GatePassScreen({
             </Pressable>
           </View>
 
+          {access.ready && (access.isHod || access.isAdmin) ? (
           <View style={styles.row}>
+            {access.isHod ? (
             <Pressable
              onPress={() => {
-                onViewPress?.();
+                onConfirmPress?.();
                 setActiveView('CONFIRM');
               }}
               style={({ pressed }) => [
@@ -141,9 +179,14 @@ export function GatePassScreen({
                 </Text>
               </View>
             </Pressable>
+            ) : null}
 
+            {access.isAdmin ? (
             <Pressable
-              onPress={onApprovePress}
+              onPress={() => {
+                onApprovePress?.();
+                setActiveView('APPROVE');
+              }}
               style={({ pressed }) => [
                 styles.card,
                 styles.secondaryCard,
@@ -160,7 +203,9 @@ export function GatePassScreen({
                 </Text>
               </View>
             </Pressable>
+            ) : null}
           </View>
+          ) : null}
         </View>
       </View>
     </View>

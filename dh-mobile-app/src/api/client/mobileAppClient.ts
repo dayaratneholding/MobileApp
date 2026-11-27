@@ -102,3 +102,69 @@ export async function getMobileAppJson<TResponse>(
 
   return result;
 }
+
+export async function postMobileAppJson<TResponse>(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+): Promise<TResponse> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const queryString = query ? buildQueryString(query) : '';
+  const url = `${MOBILE_APP_API_URL}${path}${queryString}`;
+
+  logMobileApp(path, {
+    url,
+    hasToken: Boolean(token),
+    query,
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers,
+    });
+  } catch (err) {
+    logMobileApp(path, { networkError: String(err) });
+    throw new ApiError(
+      `Cannot reach MobileApp server (${MOBILE_APP_API_URL}). Check that the server is online.`,
+    );
+  }
+
+  const text = await response.text();
+  let parsed: TResponse;
+  if (!text) {
+    parsed = [] as TResponse;
+  } else {
+    try {
+      parsed = JSON.parse(text) as TResponse;
+    } catch {
+      throw new ApiError(`Unexpected MobileApp response: ${text.slice(0, 120)}`);
+    }
+  }
+
+  logMobileApp(path, {
+    status: response.status,
+    ok: response.ok,
+    response: parsed,
+    raw: text.slice(0, 500),
+  });
+
+  if (!response.ok) {
+    const apiResult = parsed as ApiResult<unknown>;
+    const fallback =
+      response.status === 401
+        ? 'Session expired or not authorized. Please log in again.'
+        : `MobileApp request failed (${response.status}).`;
+    throw new ApiError(apiResult.messages?.[0] ?? fallback, apiResult.messages ?? undefined);
+  }
+
+  return parsed;
+}

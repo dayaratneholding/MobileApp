@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -10,8 +11,12 @@ import {
 } from 'react-native';
 import { getApiErrorMessage } from '../../api/client/client';
 import {
-  listEmployeeGatePasses,
+  decideGatePass,
+  listGatePassApprovalMembers,
+  listGatePassesForDecision,
+  resolveGatePassAccess,
   type EmployeeGatePass,
+  type GatePassDecision,
 } from '../../api/endpoints/gatePass';
 import {
   radius,
@@ -24,12 +29,13 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 
+type Mode = 'confirm' | 'approve';
+
 type Props = {
   session: AuthSession;
+  mode: Mode;
   onBack: () => void;
 };
-
-const PAGE_SIZE = 20;
 
 function statusStyleKey(item: EmployeeGatePass): 'pending' | 'ok' | 'bad' | 'neutral' {
   const name = item.statusName.toLowerCase();
@@ -58,10 +64,23 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function GatePassCard({ item }: { item: EmployeeGatePass }) {
+function GatePassCard({
+  item,
+  mode,
+  busy,
+  onConfirm,
+  onReject,
+}: {
+  item: EmployeeGatePass;
+  mode: Mode;
+  busy: boolean;
+  onConfirm: (item: EmployeeGatePass) => void;
+  onReject: (item: EmployeeGatePass) => void;
+}) {
   const styles = useThemedStyles(createStyles);
   const tone = statusStyleKey(item);
   const planTime = item.planDepartureTime === '—' ? '' : ` · ${item.planDepartureTime}`;
+  const acceptLabel = mode === 'confirm' ? 'Confirm' : 'Approve';
 
   return (
     <View style={styles.card}>
@@ -84,58 +103,78 @@ function GatePassCard({ item }: { item: EmployeeGatePass }) {
       <Detail label="Plan" value={`${item.planDepartureDate}${planTime}`} />
       <Detail label="Departure" value={item.departureTime} />
       <Detail label="Return" value={item.returnTime} />
+      <Detail label="Return status" value={item.returnStatus} />
       <Detail label="Vehicle" value={item.vehicleNumber} />
       <Detail label="Reason" value={item.reason} />
       {item.remark !== '—' ? <Detail label="Remark" value={item.remark} /> : null}
-      {item.approvedBy !== '—' ? <Detail label="Approved by" value={item.approvedBy} /> : null}
-      {item.confirmedBy !== '—' ? <Detail label="Confirmed by" value={item.confirmedBy} /> : null}
+
+      <View style={styles.actions}>
+        <Pressable
+          style={[styles.rejectBtn, busy && styles.btnDisabled]}
+          disabled={busy}
+          onPress={() => onReject(item)}
+        >
+          <Text style={styles.rejectText}>Reject</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.acceptBtn, busy && styles.btnDisabled]}
+          disabled={busy}
+          onPress={() => onConfirm(item)}
+        >
+          {busy ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.acceptText}>{acceptLabel}</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
 
-export function ConfirmGatePassScreen({ session, onBack }: Props) {
+export function ConfirmGatePassScreen({ session, mode, onBack }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const eeSerialID = session.eESerialID ?? 0;
   const [items, setItems] = useState<EmployeeGatePass[]>([]);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
+  const [actorEeSerialID, setActorEeSerialID] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [busyId, setBusyId] = useState(0);
   const [error, setError] = useState('');
 
-  const fetchPage = useCallback(
-    async (page: number, replace: boolean) => {
-      if (!eeSerialID) {
-        throw new Error('Employee ID not found in session. Please login again.');
-      }
+  const title = mode === 'confirm' ? 'Confirm GatePass' : 'Approve GatePass';
 
-      const result = await listEmployeeGatePasses({
-        eeSerialID,
-        pageNumber: page,
-        pageSize: PAGE_SIZE,
-      });
+  const load = useCallback(async () => {
+    const members = await listGatePassApprovalMembers();
+    const access = resolveGatePassAccess(members, session);
+    const allowed = mode === 'confirm' ? access.isHod : access.isAdmin;
+    if (!allowed || !access.eeSerialID) {
+      setActorEeSerialID(0);
+      setItems([]);
+      throw new Error(
+        mode === 'confirm'
+          ? 'Only a gate pass HOD can confirm these requests.'
+          : 'Only a gate pass admin can approve these requests.',
+      );
+    }
 
-      setItems((current) => (replace ? result.items : [...current, ...result.items]));
-      setPageNumber(result.currentPage);
-      setHasNextPage(result.hasNextPage);
-    },
-    [eeSerialID],
-  );
+    setActorEeSerialID(access.eeSerialID);
+    const passes = await listGatePassesForDecision(mode, access.eeSerialID);
+    setItems(passes);
+  }, [mode, session]);
 
   const loadInitial = useCallback(async () => {
     setError('');
     setLoading(true);
     try {
-      await fetchPage(1, true);
+      await load();
     } catch (err) {
       setItems([]);
       setError(getApiErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [fetchPage]);
+  }, [load]);
 
   useEffect(() => {
     loadInitial();
@@ -145,7 +184,7 @@ export function ConfirmGatePassScreen({ session, onBack }: Props) {
     setRefreshing(true);
     setError('');
     try {
-      await fetchPage(1, true);
+      await load();
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -153,16 +192,38 @@ export function ConfirmGatePassScreen({ session, onBack }: Props) {
     }
   }
 
-  async function handleLoadMore() {
-    if (!hasNextPage || loadingMore || loading) return;
-    setLoadingMore(true);
+  async function applyDecision(item: EmployeeGatePass, decision: GatePassDecision) {
+    if (!item.eGatePassSerialID || !actorEeSerialID) return;
+    setBusyId(item.eGatePassSerialID);
+    setError('');
     try {
-      await fetchPage(pageNumber + 1, false);
+      await decideGatePass({
+        eGatePassSerialID: item.eGatePassSerialID,
+        actorEeSerialID,
+        decision,
+      });
+      setItems((current) => current.filter((pass) => pass.eGatePassSerialID !== item.eGatePassSerialID));
+      const done =
+        decision === 'reject' ? 'rejected' : decision === 'confirm' ? 'confirmed' : 'approved';
+      Alert.alert('Gate pass updated', `The gate pass was ${done}.`);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
-      setLoadingMore(false);
+      setBusyId(0);
     }
+  }
+
+  function handleReject(item: EmployeeGatePass) {
+    Alert.alert('Reject gate pass', 'Are you sure you want to reject this gate pass?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: () => {
+          void applyDecision(item, 'reject');
+        },
+      },
+    ]);
   }
 
   return (
@@ -172,9 +233,13 @@ export function ConfirmGatePassScreen({ session, onBack }: Props) {
           <Text style={styles.backText}>‹ Back</Text>
         </Pressable>
         <View>
-          <Text style={styles.title}>View GatePass</Text>
+          <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>
-            {items.length > 0 ? `${items.length} pass${items.length === 1 ? '' : 'es'}` : 'Your gate passes'}
+            {items.length > 0
+              ? `${items.length} waiting`
+              : mode === 'confirm'
+                ? 'Passes waiting for confirmation'
+                : 'Passes waiting for approval'}
           </Text>
         </View>
       </View>
@@ -189,20 +254,27 @@ export function ConfirmGatePassScreen({ session, onBack }: Props) {
         <FlatList
           data={items}
           keyExtractor={(item) => String(item.eGatePassSerialID || item.id)}
-          renderItem={({ item }) => <GatePassCard item={item} />}
+          renderItem={({ item }) => (
+            <GatePassCard
+              item={item}
+              mode={mode}
+              busy={busyId === item.eGatePassSerialID}
+              onConfirm={(pass) => {
+                void applyDecision(pass, mode);
+              }}
+              onReject={handleReject}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} />
           }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No gate passes found.</Text>
+              <Text style={styles.emptyText}>
+                {error ? 'Nothing to show.' : 'No gate passes are waiting.'}
+              </Text>
             </View>
-          }
-          ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footerLoader} color={colors.primary} /> : undefined
           }
         />
       )}
@@ -314,6 +386,37 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
       flex: 1,
       textAlign: 'right',
     },
+    actions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    rejectBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      borderRadius: radius.md,
+      paddingVertical: spacing.sm,
+      alignItems: 'center',
+    },
+    rejectText: {
+      ...typography.label,
+      color: colors.danger,
+    },
+    acceptBtn: {
+      flex: 1,
+      backgroundColor: colors.success,
+      borderRadius: radius.md,
+      paddingVertical: spacing.sm,
+      alignItems: 'center',
+    },
+    acceptText: {
+      ...typography.label,
+      color: colors.textOnPrimary,
+    },
+    btnDisabled: {
+      opacity: 0.6,
+    },
     centered: {
       flex: 1,
       alignItems: 'center',
@@ -323,9 +426,7 @@ function createStyles(colors: ColorPalette, shadow: ShadowTokens) {
     emptyText: {
       ...typography.body,
       color: colors.textSecondary,
-    },
-    footerLoader: {
-      marginVertical: spacing.md,
+      textAlign: 'center',
     },
   });
 }

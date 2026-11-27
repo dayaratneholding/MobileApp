@@ -35,7 +35,8 @@ async function parseJson<T>(
       return { parsed: asNumber as T, raw: text };
     }
 
-    throw new ApiError(`Unexpected HCM response: ${text.slice(0, 120)}`);
+    const compact = text.replace(/\s+/g, ' ').trim();
+    throw new ApiError(compact.slice(0, 280) || 'Unexpected HCM response.');
   }
 }
 

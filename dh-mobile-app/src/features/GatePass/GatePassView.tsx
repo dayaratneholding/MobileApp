@@ -84,6 +84,7 @@ function GatePassCard({ item }: { item: EmployeeGatePass }) {
       <Detail label="Plan" value={`${item.planDepartureDate}${planTime}`} />
       <Detail label="Departure" value={item.departureTime} />
       <Detail label="Return" value={item.returnTime} />
+      <Detail label="Return status" value={item.returnStatus} />
       <Detail label="Vehicle" value={item.vehicleNumber} />
       <Detail label="Reason" value={item.reason} />
       {item.remark !== '—' ? <Detail label="Remark" value={item.remark} /> : null}
