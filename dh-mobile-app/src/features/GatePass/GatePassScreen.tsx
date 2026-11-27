@@ -11,6 +11,7 @@ import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import { GatePassCreate } from './GatePassCreate';
 import { GatePassView } from './GatePassView';
+import { ConfirmGatePassScreen } from './ConfirmGatePassScreen';
 
 type Props = {
   session: AuthSession;
@@ -55,6 +56,11 @@ export function GatePassScreen({
 
   if (activeView === 'VIEW') {
     return <GatePassView session={session} onBack={() => setActiveView('MENU')} />;
+  }
+
+  if(activeView === "CONFIRM"){
+      return <ConfirmGatePassScreen session={session} onBack={() => setActiveView('MENU')} />;
+
   }
 
   return (
@@ -115,7 +121,10 @@ export function GatePassScreen({
 
           <View style={styles.row}>
             <Pressable
-              onPress={onConfirmPress}
+             onPress={() => {
+                onViewPress?.();
+                setActiveView('CONFIRM');
+              }}
               style={({ pressed }) => [
                 styles.card,
                 styles.secondaryCard,
