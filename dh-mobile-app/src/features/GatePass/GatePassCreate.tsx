@@ -18,9 +18,9 @@ import { getApiErrorMessage } from '../../api/client/client';
 import { getEmployeeByEeSerialId, listCompanyEmployees } from '../../api/endpoints/employee';
 import {
   createGatePass,
-  dateParts,
+  dateOnly,
   listCompanyVehicles,
-  timeTicks,
+  timeSpan,
   type CompanyVehicle,
 } from '../../api/endpoints/gatePass';
 import type { EmployeeDetails } from '../../types/payslip';
@@ -241,9 +241,9 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
       await createGatePass({
         eeSerialID,
         comSerialID,
-        departureTime: timeTicks(departureTime),
-        returnTime: returnText ? timeTicks(returnTime) : { ticks: 0 },
-        date: dateParts(planDate),
+        departureTime: timeSpan(departureTime),
+        returnTime: returnText ? timeSpan(returnTime) : '00:00:00',
+        date: dateOnly(planDate),
         vehicleNumber,
         reason: reason.trim(),
         remark: remark.trim(),
@@ -252,8 +252,8 @@ export function GatePassCreate({ session, onBack, onSubmit }: Props) {
         confirmedBy: 0,
         confirmedDate: null,
         eGatePassStatus: EGatePassStatus.Pending,
-        planDepartureDate: dateParts(planDate),
-        planDepartureTime: timeTicks(planTime),
+        planDepartureDate: dateOnly(planDate),
+        planDepartureTime: timeSpan(planTime),
         returnstatus,
         employeeGatePassDetail: details,
         mnuSerialID: 0,

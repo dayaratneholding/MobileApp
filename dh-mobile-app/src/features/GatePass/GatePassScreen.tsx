@@ -10,6 +10,7 @@ import {
 import { useThemedStyles } from '../../theme/useThemedStyles';
 import type { AuthSession } from '../../types/api';
 import { GatePassCreate } from './GatePassCreate';
+import { GatePassView } from './GatePassView';
 
 type Props = {
   session: AuthSession;
@@ -52,6 +53,10 @@ export function GatePassScreen({
     );
   }
 
+  if (activeView === 'VIEW') {
+    return <GatePassView session={session} onBack={() => setActiveView('MENU')} />;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -86,7 +91,10 @@ export function GatePassScreen({
             </Pressable>
 
             <Pressable
-              onPress={onViewPress}
+              onPress={() => {
+                onViewPress?.();
+                setActiveView('VIEW');
+              }}
               style={({ pressed }) => [
                 styles.card,
                 styles.secondaryCard,
